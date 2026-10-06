@@ -197,11 +197,16 @@ TOOLS = [
 
 def listen_to_user():
     recognizer = sr.Recognizer()
+    # TWEAK: Increase pause threshold to 2.0 seconds so it doesn't cut you off when you say "uhhh" or pause to think.
+    recognizer.pause_threshold = 2.0 
+    recognizer.dynamic_energy_threshold = True
+    
     with sr.Microphone() as source:
-        print("\n>> Listening...")
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
+        print("\n>> Listening... (Take your time, pauses are allowed)")
+        recognizer.adjust_for_ambient_noise(source, duration=1.0)
         try:
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+            # TWEAK: No strict phrase time limit so you can speak naturally
+            audio = recognizer.listen(source, timeout=7)
             print(">> Transcribing via Whisper...")
             
             # Using Whisper for Bulletproof English/Urdu STT
@@ -213,11 +218,20 @@ def listen_to_user():
                 transcription = client.audio.transcriptions.create(
                     file=(temp_file, f.read()),
                     model="whisper-large-v3",
-                    response_format="text"
+                    response_format="text",
+                    prompt="Ummm, uhhh, mhm. " # Prompts whisper to keep filler words instead of deleting them
                 )
             text = str(transcription).strip()
+            
+            # Anti-Hallucination Filter for Whisper
+            lower_text = text.lower().replace(".", "").replace(",", "").strip()
+            if lower_text in ["thank you", "jarvis", "in order to", "thanks", "you", "mhm", "uh"]:
+                return ""
+                
             print(f">> You said: {text}")
             return text
+        except sr.WaitTimeoutError:
+            return ""
         except Exception as e:
             return ""
 
