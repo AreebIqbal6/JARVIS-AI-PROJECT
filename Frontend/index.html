@@ -1,78 +1,103 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS Lite - University Project</title>
-    <style>
-        body {
-            background-color: #0b0c10;
-            color: #66fcf1;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            overflow: hidden;
-        }
-        h1 {
-            font-size: 3rem;
-            letter-spacing: 5px;
-            text-transform: uppercase;
-            text-shadow: 0 0 10px #45a29e;
-        }
-        .orb {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            background: radial-gradient(circle, #66fcf1 0%, #1f2833 70%, #0b0c10 100%);
-            box-shadow: 0 0 50px #45a29e, inset 0 0 20px #66fcf1;
-            animation: pulse 2s infinite alternate;
-            margin-bottom: 50px;
-            cursor: pointer;
-        }
-        @keyframes pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 40px #45a29e; }
-            100% { transform: scale(1.05); box-shadow: 0 0 80px #66fcf1; }
-        }
-        #status {
-            font-size: 1.5rem;
-            color: #c5c6c7;
-            margin-top: 20px;
-        }
-        .instructions {
-            margin-top: 50px;
-            color: #45a29e;
-            text-align: center;
-            max-width: 600px;
-            line-height: 1.5;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#020617" />
+  <title>Jarvis / Hermes Dashboard UI</title>
+  <link rel="stylesheet" href="./style.css?v=1" />
 </head>
 <body>
+  <main class="shell">
+    <section class="hero panel glow">
+      <div class="topline">
+        <span class="status-dot"></span>
+        <span>J.A.R.V.I.S LITE COMMAND SURFACE</span>
+        <span class="clock" id="clock">--:--:--</span>
+      </div>
 
-    <h1>J.A.R.V.I.S LITE</h1>
-    <div class="orb" id="mic-btn"></div>
-    <div id="status">System Standby</div>
+      <div class="core-wrap" id="mic-btn" aria-label="Decorative Jarvis reactor visual" style="cursor: pointer;">
+        <div class="orbit orbit-one"></div>
+        <div class="orbit orbit-two"></div>
+        <div class="orbit orbit-three"></div>
+        <div class="reactor">
+          <span>J</span>
+        </div>
+      </div>
 
-    <div class="instructions">
-        <p><strong>Demo Instructions:</strong></p>
-        <p>1. Say <em>"Who are you?"</em> or <em>"Tum kon ho?"</em></p>
-        <p>2. Say <em>"Write an application for leave"</em></p>
-        <p>3. Say <em>"Play a song"</em></p>
-        <p>4. Say <em>"It's too dark here"</em> or <em>"Bohat andhera hai"</em></p>
-    </div>
+      <div class="hero-copy">
+        <p class="eyebrow" id="status">System Standby (Click Reactor to Listen)</p>
+        <h1>Jarvis Lite Dashboard</h1>
+        <p>
+          A safe public UI prototype for automation, smart-home status,
+          document workflows, media tools, and local knowledge systems.
+        </p>
+      </div>
+    </section>
 
-    <script>
-        // Simple UI interaction (Backend logic is in core.py via terminal for the demo)
-        const statusEl = document.getElementById('status');
-        const orb = document.getElementById('mic-btn');
-        
-        orb.addEventListener('click', () => {
-            statusEl.innerText = "Listening to voice (Check Terminal)...";
-        });
-    </script>
+    <section class="grid">
+      <article class="panel card">
+        <p class="label">Assistant</p>
+        <h2>Online</h2>
+        <p>Telegram workflows, daily briefings, GitHub updates, and document helpers.</p>
+        <div class="meter"><span style="width: 88%"></span></div>
+      </article>
+
+      <article class="panel card">
+        <p class="label">Safety Mode</p>
+        <h2>Approval Required</h2>
+        <p>Posting, buying, deleting, booking, and device control stay user-approved.</p>
+        <div class="meter amber"><span style="width: 72%"></span></div>
+      </article>
+
+      <article class="panel card">
+        <p class="label">Knowledge</p>
+        <h2>Local First</h2>
+        <p>Private notes, documents, and tokens belong outside public GitHub repos.</p>
+        <div class="meter violet"><span style="width: 64%"></span></div>
+      </article>
+    </section>
+
+    <section class="split">
+      <article class="panel command-panel">
+        <div class="section-head">
+          <div>
+            <p class="label">Command Preview</p>
+            <h2>Try a safe demo command</h2>
+          </div>
+          <button id="randomCommand">Random</button>
+        </div>
+        <div class="terminal" id="terminalOutput">
+          <p><span>$</span> hermes status</p>
+          <p>Gateway: ready</p>
+          <p>Daily automations: scheduled</p>
+          <p>Dashboard: public-safe demo mode</p>
+        </div>
+      </article>
+
+      <article class="panel modules">
+        <p class="label">Modules</p>
+        <div id="moduleList"></div>
+      </article>
+    </section>
+
+    <section class="panel roadmap">
+      <p class="label">Next Build Ideas</p>
+      <div class="roadmap-row">
+        <span>01</span>
+        <p>Phone-friendly PWA with secure command bridge.</p>
+      </div>
+      <div class="roadmap-row">
+        <span>02</span>
+        <p>Dashboard cards for weather, GitHub, documents, and smart-home status.</p>
+      </div>
+      <div class="roadmap-row">
+        <span>03</span>
+        <p>Approval-flow screen for risky actions.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="./app.js?v=1"></script>
 </body>
 </html>
