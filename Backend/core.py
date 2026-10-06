@@ -207,25 +207,35 @@ def listen_to_user():
         try:
             # TWEAK: No strict phrase time limit so you can speak naturally
             audio = recognizer.listen(source, timeout=7)
-            print(">> Transcribing via Whisper...")
+            print(">> Transcribing via Deepgram Nova-2...")
             
-            # Using Whisper for Bulletproof English/Urdu STT
+            # Using Deepgram Nova-2 for ultra-realistic conversational STT
             temp_file = "temp.wav"
             with open(temp_file, "wb") as f:
                 f.write(audio.get_wav_data())
 
-            with open(temp_file, "rb") as f:
-                transcription = client.audio.transcriptions.create(
-                    file=(temp_file, f.read()),
-                    model="whisper-large-v3",
-                    response_format="text",
-                    prompt="Ummm, uhhh, mhm. " # Prompts whisper to keep filler words instead of deleting them
-                )
-            text = str(transcription).strip()
+            import requests
+            dg_key = os.getenv("DEEPGRAM_API_KEY")
+            if not dg_key:
+                print(">> ERROR: DEEPGRAM_API_KEY not found in .env file!")
+                return ""
+                
+            url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&filler_words=true"
+            headers = {
+                "Authorization": f"Token {dg_key}",
+                "Content-Type": "audio/wav"
+            }
             
-            # Anti-Hallucination Filter for Whisper
-            lower_text = text.lower().replace(".", "").replace(",", "").strip()
-            if lower_text in ["thank you", "jarvis", "in order to", "thanks", "you", "mhm", "uh"]:
+            with open(temp_file, "rb") as f:
+                response = requests.post(url, headers=headers, data=f)
+                
+            data = response.json()
+            try:
+                text = data['results']['channels'][0]['alternatives'][0]['transcript']
+            except KeyError:
+                text = ""
+                
+            if not text.strip():
                 return ""
                 
             print(f">> You said: {text}")
