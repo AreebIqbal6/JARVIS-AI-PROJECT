@@ -82,6 +82,42 @@ def control_smart_plug(state: str):
         print(f"Hardware error (simulating success for demo): {e}")
         return f"Smart plug turned {state} (simulated)."
 
+def open_application(app_name: str):
+    """Opens common Windows applications."""
+    apps = {
+        "notepad": "notepad",
+        "calculator": "calc",
+        "browser": "start chrome",
+        "youtube": "start chrome https://youtube.com"
+    }
+    app_cmd = apps.get(app_name.lower())
+    if app_cmd:
+        os.system(app_cmd)
+        return f"Opened {app_name}"
+    else:
+        return f"Application {app_name} not recognized."
+
+def take_screenshot():
+    """Takes a screenshot of the main screen."""
+    try:
+        import pyautogui
+        screenshot = pyautogui.screenshot()
+        screenshot.save("screenshot.png")
+        os.system("start screenshot.png")
+        return "Screenshot captured and opened."
+    except Exception as e:
+        return f"Screenshot failed: {str(e)}"
+
+def play_youtube_video(query: str):
+    """Searches and plays a specific video on YouTube."""
+    try:
+        import pywhatkit
+        pywhatkit.playonyt(query)
+        return f"Playing {query} on YouTube."
+    except Exception as e:
+        return f"Failed to play YouTube video: {str(e)}"
+
+
 TOOLS = [
     {
         "type": "function",
@@ -116,6 +152,42 @@ TOOLS = [
                     "state": {"type": "string", "enum": ["on", "off"], "description": "The state to set the plug to."}
                 },
                 "required": ["state"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_application",
+            "description": "Opens a common computer application.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_name": {"type": "string", "enum": ["notepad", "calculator", "browser", "youtube"], "description": "The name of the application to open."}
+                },
+                "required": ["app_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "take_screenshot",
+            "description": "Takes a screenshot of the user's computer screen and opens it.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "play_youtube_video",
+            "description": "Plays a specific video or song on YouTube.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The name of the video or song to play on YouTube."}
+                },
+                "required": ["query"]
             }
         }
     }
@@ -154,7 +226,9 @@ def process_intent(user_text):
         "If the user speaks Urdu, you can reply in Roman Urdu or English. "
         "If the user says 'bohat andhera hai' (it is too dark) or similar, use the control_smart_plug tool to turn it ON. "
         "If they ask to write an application, use the write_word_document tool. "
-        "If they ask to play a song, use the play_music tool. "
+        "If they ask to play a song generally, use play_music. If they ask to play a specific song or video on YouTube, use play_youtube_video. "
+        "If they ask to open an app like calculator or notepad, use open_application. "
+        "If they ask to take a screenshot or take a picture of the screen, use take_screenshot. "
         "Keep normal conversational answers short and concise."
     )
     
@@ -185,6 +259,12 @@ def process_intent(user_text):
                 result = play_music()
             elif func_name == "control_smart_plug":
                 result = control_smart_plug(args.get("state"))
+            elif func_name == "open_application":
+                result = open_application(args.get("app_name"))
+            elif func_name == "take_screenshot":
+                result = take_screenshot()
+            elif func_name == "play_youtube_video":
+                result = play_youtube_video(args.get("query"))
                 
             speak(f"Action complete: {result}")
             return result

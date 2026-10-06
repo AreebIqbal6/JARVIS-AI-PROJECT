@@ -7,6 +7,9 @@ This is a lightweight, simplified version of JARVIS designed specifically for a 
 2. **Software Automation**: 
    - **MS Word Generation**: JARVIS can draft a complete leave application (or any topic) in Microsoft Word and open it automatically.
    - **Music Playback**: JARVIS can open Spotify or your default music player on command.
+   - **YouTube Integration**: Say "Play [video name] on YouTube" and JARVIS will instantly search and play it via `pywhatkit`.
+   - **App Launching**: Ask JARVIS to "Open Calculator" or "Open Notepad" and it executes natively.
+   - **Screen Capture**: Ask JARVIS to "Take a screenshot" and it will capture your current screen and display it automatically using `pyautogui`.
 3. **Hardware Control (Smart Plug)**:
    - Understands intent perfectly: Simply saying *"It is too dark in here"* or *"Yahan bohat andhera hai"* triggers JARVIS to understand your intent and turn on the Smart Plug (connected to a lamp/bulb).
 
