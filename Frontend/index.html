@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Lite - University Project</title>
+    <style>
+        body {
+            background-color: #0b0c10;
+            color: #66fcf1;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        h1 {
+            font-size: 3rem;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px #45a29e;
+        }
+        .orb {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #66fcf1 0%, #1f2833 70%, #0b0c10 100%);
+            box-shadow: 0 0 50px #45a29e, inset 0 0 20px #66fcf1;
+            animation: pulse 2s infinite alternate;
+            margin-bottom: 50px;
+            cursor: pointer;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 40px #45a29e; }
+            100% { transform: scale(1.05); box-shadow: 0 0 80px #66fcf1; }
+        }
+        #status {
+            font-size: 1.5rem;
+            color: #c5c6c7;
+            margin-top: 20px;
+        }
+        .instructions {
+            margin-top: 50px;
+            color: #45a29e;
+            text-align: center;
+            max-width: 600px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>J.A.R.V.I.S LITE</h1>
+    <div class="orb" id="mic-btn"></div>
+    <div id="status">System Standby</div>
+
+    <div class="instructions">
+        <p><strong>Demo Instructions:</strong></p>
+        <p>1. Say <em>"Who are you?"</em> or <em>"Tum kon ho?"</em></p>
+        <p>2. Say <em>"Write an application for leave"</em></p>
+        <p>3. Say <em>"Play a song"</em></p>
+        <p>4. Say <em>"It's too dark here"</em> or <em>"Bohat andhera hai"</em></p>
+    </div>
+
+    <script>
+        // Simple UI interaction (Backend logic is in core.py via terminal for the demo)
+        const statusEl = document.getElementById('status');
+        const orb = document.getElementById('mic-btn');
+        
+        orb.addEventListener('click', () => {
+            statusEl.innerText = "Listening to voice (Check Terminal)...";
+        });
+    </script>
+</body>
+</html>
