@@ -111,11 +111,13 @@ def take_screenshot():
 def play_youtube_video(query: str):
     """Searches and plays a specific video on YouTube."""
     try:
-        import pywhatkit
-        pywhatkit.playonyt(query)
-        return f"Playing {query} on YouTube."
+        import webbrowser
+        import urllib.parse
+        search_query = urllib.parse.quote(query)
+        webbrowser.open(f"https://www.youtube.com/results?search_query={search_query}")
+        return f"Searching for {query} on YouTube."
     except Exception as e:
-        return f"Failed to play YouTube video: {str(e)}"
+        return f"Failed to open YouTube: {str(e)}"
 
 
 TOOLS = [
