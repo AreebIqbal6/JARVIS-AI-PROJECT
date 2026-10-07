@@ -13,11 +13,41 @@ Assistantname = env_vars.get("Assistantname", "Jarvis")
 
 from Frontend.GUI import (
     GraphicalUserInterface, SetAssistantStatus, ShowTextToScreen,
-    SetMicrophoneStatus, GetMicrophoneStatus, ShowDefaultChatIfNoChats, ChatLogIntegration
+    SetMicrophoneStatus, GetMicrophoneStatus
 )
 from Backend.SpeechToText import SpeechRecognition
 from Backend.TextToSpeech import TextToSpeech
 from Backend.core import process_intent
+import json
+
+def ShowDefaultChatIfNoChats():
+    if not os.path.exists("Data"): 
+        os.makedirs("Data")
+    chat_log_path = "ChatLog.json"
+    if not os.path.exists(chat_log_path):
+        with open(chat_log_path, 'w', encoding='utf-8') as f: 
+            json.dump([], f)
+
+from Frontend.GUI import AnswerModifier, TempDirectoryPath
+
+def ChatLogIntegration():
+    try:
+        if not os.path.exists("ChatLog.json"): 
+            return
+        with open("ChatLog.json", 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        formatted = ""
+        if data and isinstance(data, list):
+            for e in data:
+                role = Username if e.get("role") == "user" else Assistantname
+                formatted += f"{role}: {e.get('content', '')}\\n"
+        
+        db_path = TempDirectoryPath('Database.data')
+        with open(db_path, 'w', encoding='utf-8') as f:
+            f.write(AnswerModifier(formatted))
+    except Exception as e:
+        print(f"ChatLogIntegration Error: {e}")
+
 
 def MainExecution():
     SetAssistantStatus("Listening...")
