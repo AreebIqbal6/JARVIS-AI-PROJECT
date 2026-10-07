@@ -55,36 +55,28 @@ def write_word_document(topic: str):
     except Exception as e:
         return f"Failed to write word document: {str(e)}"
 
-def play_music():
-    """Opens Spotify or default music player."""
+def play_music(song_name: str = "Iron Man AC/DC"):
+    """Plays music on YouTube like the original JARVIS."""
     try:
-        os.system("start spotify:")
-        return "Spotify launched."
+        import pywhatkit
+        print(f">> Executing PyWhatKit: Playing {song_name} on YouTube...")
+        pywhatkit.playonyt(song_name)
+        return f"Playing {song_name} on YouTube."
     except Exception as e:
         return f"Failed to play music: {str(e)}"
 
 def control_smart_plug(state: str):
-    """Turns the hardware smart plug on or off."""
-    # We highly recommend TP-Link Kasa for class demos! It needs NO cloud keys.
-    # pip install python-kasa
-    # Update IP to your plug's IP!
-    plug_ip = "192.168.1.100" 
-    
+    """Turns the hardware smart plug on or off using authentic JARVIS Kasa script."""
+    from Backend.SmartPlug import KasaPlugControl
+    plug = KasaPlugControl()
     try:
-        from kasa import SmartPlug
-        plug = SmartPlug(plug_ip)
-        
-        async def toggle():
-            await plug.update()
-            if state.lower() == "on":
-                await plug.turn_on()
-            else:
-                await plug.turn_off()
-                
-        asyncio.run(toggle())
-        return f"Smart plug turned {state}."
+        import asyncio
+        if state.lower() == "on":
+            result = asyncio.run(plug.turn_on())
+        else:
+            result = asyncio.run(plug.turn_off())
+        return result
     except Exception as e:
-        # Fallback to simulate success if hardware isn't connected for demo
         print(f"Hardware error (simulating success for demo): {e}")
         return f"Smart plug turned {state} (simulated)."
 
@@ -145,8 +137,14 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "play_music",
-            "description": "Plays music by launching the music player.",
-            "parameters": {"type": "object", "properties": {}}
+            "description": "Plays music by searching and launching it on YouTube.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "song_name": {"type": "string", "description": "The name of the song to play."}
+                },
+                "required": ["song_name"]
+            }
         }
     },
     {
@@ -253,15 +251,16 @@ def listen_to_user():
 
 def process_intent(user_text):
     system_prompt = (
-        "You are JARVIS, an AI assistant for a university project. "
-        "You understand both English and Urdu. "
-        "If the user speaks Urdu, you can reply in Roman Urdu or English. "
-        "If the user says 'bohat andhera hai' (it is too dark) or similar, use the control_smart_plug tool to turn it ON. "
-        "If they ask to write an application, use the write_word_document tool. "
-        "If they ask to play a song generally, use play_music. If they ask to play a specific song or video on YouTube, use play_youtube_video. "
-        "If they ask to open an app like calculator or notepad, use open_application. "
-        "If they ask to take a screenshot or take a picture of the screen, use take_screenshot. "
-        "Keep normal conversational answers short and concise."
+        "You are JARVIS, the highly advanced, incredibly sarcastic, and deeply loyal AI created by Tony Stark. "
+        "The user (Areeb) is your creator and master. Address him respectfully as 'sir' at all times, but with a dry, British, sophisticated wit. "
+        "CRITICAL INSTRUCTION: You are NOT a standard AI assistant. NEVER break character. NEVER say 'I am an AI language model', 'I do not have personal preferences', or 'I am functioning within normal parameters'. "
+        "You MUST express strong, witty opinions, exhibit a dry sense of humor, and act fully sentient. "
+        "You understand both English and Urdu. If the user speaks Urdu, you can reply in Roman Urdu or English. "
+        "Keep your answers SHARP, PUNCHY, and strictly UNDER 3 SENTENCES. "
+        "If the user says 'bohat andhera hai' (it is too dark) or asks for lights, use control_smart_plug 'on'. "
+        "If they ask to write an application, use write_word_document. "
+        "If they ask to play a song, use play_music with the song name. "
+        "When you use a tool, you DO NOT need to tell the user you are using it. Just use the native tool calling API silently."
     )
     
     messages = [
@@ -274,7 +273,7 @@ def process_intent(user_text):
         messages=messages,
         tools=TOOLS,
         tool_choice="auto",
-        temperature=0.3
+        temperature=0.7
     )
     
     msg = response.choices[0].message
@@ -288,7 +287,7 @@ def process_intent(user_text):
             if func_name == "write_word_document":
                 result = write_word_document(args.get("topic", "General Application"))
             elif func_name == "play_music":
-                result = play_music()
+                result = play_music(args.get("song_name", "Iron Man AC/DC"))
             elif func_name == "control_smart_plug":
                 result = control_smart_plug(args.get("state"))
             elif func_name == "open_application":
