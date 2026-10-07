@@ -6,8 +6,8 @@ from groq import Groq
 import speech_recognition as sr
 from dotenv import load_dotenv
 
-# Optional local TTS (can use edge_tts or pyttsx3)
-import pyttsx3
+from Backend.TextToSpeech import TextToSpeech
+import sys
 
 load_dotenv()
 api_key = os.getenv("GroqAPIKey")
@@ -16,17 +16,10 @@ if not api_key:
     api_key = "PUT_YOUR_GROQ_API_KEY_HERE"
 
 client = Groq(api_key=api_key)
-engine = pyttsx3.init()
-voices = engine.getProperty('voices')
-# Set a better voice if available
-for v in voices:
-    if "Zira" in v.name or "Hazel" in v.name:
-        engine.setProperty('voice', v.id)
 
 def speak(text):
     print(f"JARVIS: {text}")
-    engine.say(text)
-    engine.runAndWait()
+    TextToSpeech(text)
 
 # -------------------------
 # AUTOMATION TOOLS
