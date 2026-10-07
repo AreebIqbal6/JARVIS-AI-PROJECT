@@ -32,20 +32,33 @@ def speak(text):
 # AUTOMATION TOOLS
 # -------------------------
 def write_word_document(topic: str):
-    """Writes an application in MS Word."""
+    """Writes an application in MS Word using LLM for content."""
     try:
         from docx import Document
-        doc = Document()
-        doc.add_heading('Application', 0)
-        doc.add_paragraph(f'Subject: {topic}')
-        doc.add_paragraph('Dear Sir/Madam,')
-        doc.add_paragraph(f'I am writing this application to formally request / inform you about {topic}. Please consider my application.')
-        doc.add_paragraph('Sincerely,\nStudent')
         
-        filename = "Application.docx"
+        # Ask Groq to generate the letter
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are a professional secretary. Write a formal, concise 3-paragraph application/letter based on the user's topic. Do NOT use markdown. Write pure text."},
+                {"role": "user", "content": f"Write an application for: {topic}"}
+            ],
+            temperature=0.3
+        )
+        content = completion.choices[0].message.content
+        
+        # Save to Word
+        doc = Document()
+        doc.add_heading(topic.title(), 0)
+        
+        for paragraph in content.split('\n\n'):
+            if paragraph.strip():
+                doc.add_paragraph(paragraph.strip())
+        
+        filename = f"{topic.replace(' ', '_')}.docx"
         doc.save(filename)
         os.system(f'start {filename}')
-        return "Word document created and opened."
+        return "Word document created and opened successfully."
     except Exception as e:
         return f"Failed to write word document: {str(e)}"
 
