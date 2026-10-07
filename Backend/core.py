@@ -249,6 +249,9 @@ def listen_to_user():
         except Exception as e:
             return ""
 
+
+CHAT_LOG_PATH = "ChatLog.json"
+
 def process_intent(user_text):
     system_prompt = (
         "You are JARVIS, the highly advanced, incredibly sarcastic, and deeply loyal AI created by Tony Stark. "
@@ -263,47 +266,82 @@ def process_intent(user_text):
         "When you use a tool, you DO NOT need to tell the user you are using it. Just use the native tool calling API silently."
     )
     
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_text}
-    ]
+    try:
+        import json
+        with open(CHAT_LOG_PATH, "r", encoding="utf-8") as f:
+            messages = json.load(f)
+            if not isinstance(messages, list): messages = []
+    except Exception:
+        messages = []
+
+    messages.append({"role": "user", "content": user_text})
+    api_messages = messages[-20:] if len(messages) > 20 else messages
+    
+    full_context = [{"role": "system", "content": system_prompt}] + api_messages
     
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=messages,
+        messages=full_context,
         tools=TOOLS,
         tool_choice="auto",
         temperature=0.7
     )
     
     msg = response.choices[0].message
+    final_answer = msg.content or ""
     
     if msg.tool_calls:
+        messages.append(msg)
         for tool_call in msg.tool_calls:
+            import json
             func_name = tool_call.function.name
             args = json.loads(tool_call.function.arguments)
             print(f">> Executing Tool: {func_name} with {args}")
             
+            result = "Function executed."
             if func_name == "write_word_document":
                 result = write_word_document(args.get("topic", "General Application"))
             elif func_name == "play_music":
                 result = play_music(args.get("song_name", "Iron Man AC/DC"))
             elif func_name == "control_smart_plug":
-                result = control_smart_plug(args.get("state"))
+                result = control_smart_plug(args.get("state", "on"))
             elif func_name == "open_application":
                 result = open_application(args.get("app_name"))
             elif func_name == "take_screenshot":
                 result = take_screenshot()
-            elif func_name == "play_youtube_video":
-                result = play_youtube_video(args.get("query"))
-                
-            speak(f"Action complete: {result}")
-            return result
+            
+            messages.append({
+                "tool_call_id": tool_call.id,
+                "role": "tool",
+                "name": func_name,
+                "content": str(result),
+            })
+            
+        second_response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": system_prompt}] + messages[-25:]
+        )
+        final_answer = second_response.choices[0].message.content
+        
+    messages.append({"role": "assistant", "content": final_answer})
     
-    else:
-        ans = msg.content
-        speak(ans)
-        return ans
+    safe_messages = []
+    for m in messages:
+        try:
+            msg_dict = m.model_dump() if hasattr(m, 'model_dump') else m
+            if isinstance(msg_dict, dict):
+                role = msg_dict.get("role")
+                has_tools = msg_dict.get("tool_calls") is not None
+                if role in ["user", "assistant"] and not has_tools:
+                    clean_msg = {"role": role, "content": msg_dict.get("content", "")}
+                    safe_messages.append(clean_msg)
+        except: pass
+        
+    import json
+    with open(CHAT_LOG_PATH, "w", encoding="utf-8") as f:
+        json.dump(safe_messages, f, indent=4, ensure_ascii=False)
+        
+    return final_answer
 
 def main_loop():
     speak("System online. Hello.")
