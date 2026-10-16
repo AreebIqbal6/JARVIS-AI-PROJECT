@@ -60,11 +60,12 @@ class JarvisChatbot:
         ]
         if any(trigger in lower for trigger in on_triggers):
             res = await self.device.turn_on()
+            reply = "Right away, Sir. Power has been restored to the smart plug. Let there be light." if res["ok"] else f"Unable to dispatch power, Sir. Physical smart plug at {self.device.ip} is unreachable on the local Wi-Fi."
             return {
                 "action": "turn_on",
                 "success": res["ok"],
-                "hardware": res["data"].get("hardware", "virtual"),
-                "reply": "Right away, Sir. Power has been restored to the smart plug. Let there be light.",
+                "hardware": res["data"].get("hardware", "disconnected"),
+                "reply": reply,
             }
 
         # 2. Turn OFF Intents
@@ -74,11 +75,12 @@ class JarvisChatbot:
         ]
         if any(trigger in lower for trigger in off_triggers):
             res = await self.device.turn_off()
+            reply = "Power disengaged, Sir. The smart plug is now switched off." if res["ok"] else f"Unable to cut power, Sir. Physical smart plug at {self.device.ip} is unreachable on the local Wi-Fi."
             return {
                 "action": "turn_off",
                 "success": res["ok"],
-                "hardware": res["data"].get("hardware", "virtual"),
-                "reply": "Power disengaged, Sir. The smart plug is now switched off.",
+                "hardware": res["data"].get("hardware", "disconnected"),
+                "reply": reply,
             }
 
         # 3. Energy Monitoring Telemetry Intents
@@ -88,14 +90,18 @@ class JarvisChatbot:
         ]
         if any(trigger in lower for trigger in energy_triggers):
             status = await self.device.get_status()
-            energy = status["data"]["energy"]
-            w = energy["current_watts"]
-            kwh = energy["today_kwh"]
-            v = energy["voltage_v"]
-            reply = f"Telemetry active, Sir: Current draw is {w} Watts at {v} Volts. Today's cumulative consumption stands at {kwh} kWh."
+            if status["ok"] and status["data"].get("connected"):
+                energy = status["data"]["energy"]
+                w = energy["current_watts"]
+                kwh = energy["today_kwh"]
+                v = energy["voltage_v"]
+                reply = f"Telemetry active, Sir: Current draw is {w} Watts at {v} Volts. Today's cumulative consumption stands at {kwh} kWh."
+            else:
+                energy = {"current_watts": 0.0, "today_kwh": 0.0, "voltage_v": 0.0, "current_a": 0.0}
+                reply = f"Telemetry offline, Sir. Physical smart plug at {self.device.ip} is not currently connected to the local network."
             return {
                 "action": "energy_telemetry",
-                "success": True,
+                "success": status["ok"],
                 "data": energy,
                 "reply": reply,
             }
@@ -106,23 +112,28 @@ class JarvisChatbot:
             digits = re.findall(r"\b\d+\b", lower)
             level = int(digits[0]) if digits else 50
             res = await self.device.set_brightness(level)
+            reply = f"Adjusted brightness to {level}%, Sir." if res["ok"] else f"Unable to adjust brightness: device at {self.device.ip} is unreachable."
             return {
                 "action": "set_brightness",
                 "level": level,
                 "success": res["ok"],
-                "reply": f"Adjusted brightness to {level}%, Sir.",
+                "reply": reply,
             }
 
         # 5. Device Status Check
         if "is the plug on" in lower or "status" in lower or "plug status" in lower or "kya hal hai" in lower:
             status = await self.device.get_status()
-            is_on = status["data"]["is_on"]
-            state_str = "ACTIVE (ON)" if is_on else "STANDBY (OFF)"
+            if status["ok"] and status["data"].get("connected"):
+                is_on = status["data"]["is_on"]
+                state_str = "ACTIVE (ON)" if is_on else "STANDBY (OFF)"
+                reply = f"The smart plug is currently {state_str} on address {self.device.ip}."
+            else:
+                reply = f"The smart plug at {self.device.ip} is currently DISCONNECTED (OFFLINE)."
             return {
                 "action": "get_status",
-                "success": True,
+                "success": status["ok"],
                 "data": status["data"],
-                "reply": f"The smart plug is currently {state_str} on address {self.device.ip}.",
+                "reply": reply,
             }
 
         return {"action": None}

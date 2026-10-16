@@ -64,35 +64,45 @@ function initWebSocket() {
 // 2. Hardware UI Synchronization
 function updateHardwareUI(data) {
   if (!data) return;
-  isPowerOn = Boolean(data.is_on);
+  const isConnected = Boolean(data.connected);
+  isPowerOn = isConnected && Boolean(data.is_on);
 
   // Power orb
   btnPowerToggle.classList.toggle('active', isPowerOn);
-  powerStateText.textContent = isPowerOn ? 'ON' : 'OFF';
+  btnPowerToggle.classList.toggle('offline', !isConnected);
+  powerStateText.textContent = isConnected ? (isPowerOn ? 'ON' : 'OFF') : 'OFFLINE';
   powerStateText.classList.toggle('on', isPowerOn);
   
   if (data.model) plugModel.textContent = data.model;
   if (data.ip) plugIp.textContent = data.ip;
-  if (data.hardware) hardwareType.textContent = data.hardware === 'physical' ? 'Physical Hardware' : 'Simulated Sandbox';
+  hardwareType.textContent = isConnected ? 'REAL HARDWARE (CONNECTED)' : 'HARDWARE OFFLINE (NO MOCK)';
+  hardwareType.style.color = isConnected ? '#00e5ff' : '#ff4444';
+  plugNetDot.classList.toggle('on', isConnected);
 
-  // Energy Telemetry
+  // Energy Telemetry - Real values only
   if (data.energy) {
-    const w = data.energy.current_watts || 0;
+    const w = isConnected ? (data.energy.current_watts || 0) : 0.0;
     valWatts.innerHTML = `${w.toFixed(1)} <span class="unit">W</span>`;
     
-    // Scale bar up to 2500 Watts max for Tapo P110
-    const pct = Math.min(100, Math.max(0, (w / 2000) * 100));
+    const pct = isConnected ? Math.min(100, Math.max(0, (w / 2000) * 100)) : 0;
     fillWatts.style.width = `${pct}%`;
 
-    valKwh.innerHTML = `${(data.energy.today_kwh || 0).toFixed(3)} <span class="unit">kWh</span>`;
-    valVolts.innerHTML = `${(data.energy.voltage_v || 228.4).toFixed(1)} <span class="unit">V</span>`;
-    valAmps.innerHTML = `${(data.energy.current_a || 0).toFixed(2)} <span class="unit">A</span>`;
+    const kwh = isConnected ? (data.energy.today_kwh || 0) : 0.0;
+    const v = isConnected ? (data.energy.voltage_v || 0) : 0.0;
+    const a = isConnected ? (data.energy.current_a || 0) : 0.0;
+
+    valKwh.innerHTML = `${kwh.toFixed(3)} <span class="unit">kWh</span>`;
+    valVolts.innerHTML = `${v.toFixed(1)} <span class="unit">V</span>`;
+    valAmps.innerHTML = `${a.toFixed(2)} <span class="unit">A</span>`;
   }
 
   // Brightness
-  if (data.brightness !== undefined) {
+  if (data.brightness !== undefined && isConnected) {
     sliderBrightness.value = data.brightness;
     brightVal.textContent = `${data.brightness}%`;
+  } else if (!isConnected) {
+    sliderBrightness.value = 0;
+    brightVal.textContent = `0%`;
   }
 }
 
@@ -165,16 +175,20 @@ btnScanNet.addEventListener('click', async () => {
     const data = await res.json();
     if (data.ok && data.devices) {
       devicesList.innerHTML = '';
-      data.devices.forEach(d => {
-        const item = document.createElement('div');
-        item.className = 'device-item';
-        item.innerHTML = `
-          <span class="dev-dot ${d.is_on ? 'on' : ''}"></span>
-          <span class="dev-name">${d.alias || d.model} (${d.ip})</span>
-          <span class="dev-tag">${d.has_energy ? 'ENERGY P110' : 'STANDARD'}</span>
-        `;
-        devicesList.appendChild(item);
-      });
+      if (!data.devices || data.devices.length === 0) {
+        devicesList.innerHTML = '<div style="padding: 12px; color: #ff6b6b; font-size: 11px; text-align: center; border: 1px dashed rgba(255, 68, 68, 0.4); border-radius: 8px;">NO PHYSICAL HARDWARE DETECTED ON LOCAL WI-FI (0 FOUND)</div>';
+      } else {
+        data.devices.forEach(d => {
+          const item = document.createElement('div');
+          item.className = 'device-item';
+          item.innerHTML = `
+            <span class="dev-dot ${d.is_on ? 'on' : ''}"></span>
+            <span class="dev-name">${d.alias || d.model} (${d.ip})</span>
+            <span class="dev-tag">${d.has_energy ? 'ENERGY P110' : 'STANDARD'}</span>
+          `;
+          devicesList.appendChild(item);
+        });
+      }
     }
   } catch (e) {
     console.error('Discovery error:', e);
