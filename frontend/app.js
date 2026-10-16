@@ -1,7 +1,9 @@
 // J.A.R.V.I.S. Client Controller & WebSocket Telemetry Synchronizer
+// 100% Real Hardware Data & Dynamic Device Pairing
 
 let ws = null;
 let isPowerOn = false;
+let isDeviceConnected = false;
 let isVoiceListening = false;
 
 // DOM Elements
@@ -23,6 +25,12 @@ const brightVal = document.getElementById('brightVal');
 const btnScanNet = document.getElementById('btnScanNet');
 const devicesList = document.getElementById('devicesList');
 
+const inputTargetIp = document.getElementById('inputTargetIp');
+const inputTapoUser = document.getElementById('inputTapoUser');
+const inputTapoPass = document.getElementById('inputTapoPass');
+const btnManualPair = document.getElementById('btnManualPair');
+const pairStatusMessage = document.getElementById('pairStatusMessage');
+
 const chatLog = document.getElementById('chatLog');
 const chatInput = document.getElementById('chatInput');
 const btnSend = document.getElementById('btnSend');
@@ -38,7 +46,6 @@ function initWebSocket() {
 
   ws.onopen = () => {
     console.log('[J.A.R.V.I.S. WS] Connected to Core Telemetry.');
-    plugNetDot.classList.add('on');
   };
 
   ws.onmessage = (event) => {
@@ -61,35 +68,36 @@ function initWebSocket() {
   };
 }
 
-// 2. Hardware UI Synchronization
+// 2. Hardware UI Synchronization (Real Data Only)
 function updateHardwareUI(data) {
   if (!data) return;
-  const isConnected = Boolean(data.connected);
-  isPowerOn = isConnected && Boolean(data.is_on);
+  isDeviceConnected = Boolean(data.connected);
+  isPowerOn = isDeviceConnected && Boolean(data.is_on);
 
   // Power orb
   btnPowerToggle.classList.toggle('active', isPowerOn);
-  btnPowerToggle.classList.toggle('offline', !isConnected);
-  powerStateText.textContent = isConnected ? (isPowerOn ? 'ON' : 'OFF') : 'OFFLINE';
+  btnPowerToggle.classList.toggle('offline', !isDeviceConnected);
+  powerStateText.textContent = isDeviceConnected ? (isPowerOn ? 'ON' : 'OFF') : 'OFFLINE';
   powerStateText.classList.toggle('on', isPowerOn);
   
-  if (data.model) plugModel.textContent = data.model;
-  if (data.ip) plugIp.textContent = data.ip;
-  hardwareType.textContent = isConnected ? 'REAL HARDWARE (CONNECTED)' : 'HARDWARE OFFLINE (NO MOCK)';
-  hardwareType.style.color = isConnected ? '#00e5ff' : '#ff4444';
-  plugNetDot.classList.toggle('on', isConnected);
+  if (data.model) plugModel.textContent = isDeviceConnected ? data.model : 'Disconnected';
+  if (data.ip) plugIp.textContent = isDeviceConnected ? data.ip : 'None';
+  
+  hardwareType.textContent = isDeviceConnected ? 'REAL HARDWARE (CONNECTED)' : 'HARDWARE OFFLINE (NO MOCK)';
+  hardwareType.style.color = isDeviceConnected ? '#00e5ff' : '#ff4444';
+  plugNetDot.classList.toggle('on', isDeviceConnected);
 
-  // Energy Telemetry - Real values only
+  // Energy Telemetry - Real values only (0.0 if not connected)
   if (data.energy) {
-    const w = isConnected ? (data.energy.current_watts || 0) : 0.0;
+    const w = isDeviceConnected ? (data.energy.current_watts || 0) : 0.0;
     valWatts.innerHTML = `${w.toFixed(1)} <span class="unit">W</span>`;
     
-    const pct = isConnected ? Math.min(100, Math.max(0, (w / 2000) * 100)) : 0;
+    const pct = isDeviceConnected ? Math.min(100, Math.max(0, (w / 2000) * 100)) : 0;
     fillWatts.style.width = `${pct}%`;
 
-    const kwh = isConnected ? (data.energy.today_kwh || 0) : 0.0;
-    const v = isConnected ? (data.energy.voltage_v || 0) : 0.0;
-    const a = isConnected ? (data.energy.current_a || 0) : 0.0;
+    const kwh = isDeviceConnected ? (data.energy.today_kwh || 0) : 0.0;
+    const v = isDeviceConnected ? (data.energy.voltage_v || 0) : 0.0;
+    const a = isDeviceConnected ? (data.energy.current_a || 0) : 0.0;
 
     valKwh.innerHTML = `${kwh.toFixed(3)} <span class="unit">kWh</span>`;
     valVolts.innerHTML = `${v.toFixed(1)} <span class="unit">V</span>`;
@@ -97,19 +105,79 @@ function updateHardwareUI(data) {
   }
 
   // Brightness
-  if (data.brightness !== undefined && isConnected) {
+  if (data.brightness !== undefined && isDeviceConnected) {
     sliderBrightness.value = data.brightness;
     brightVal.textContent = `${data.brightness}%`;
-  } else if (!isConnected) {
+  } else if (!isDeviceConnected) {
     sliderBrightness.value = 0;
     brightVal.textContent = `0%`;
   }
 }
 
-// 3. Hardware Controls
+// 3. Dynamic Pairing Controls
+async function pairDevice(ip, username, password) {
+  const cleanIp = (ip || '').trim();
+  if (!cleanIp) {
+    showPairStatus('Please enter a target device IP address.', false);
+    return;
+  }
+
+  showPairStatus(`Contacting hardware at ${cleanIp}...`, null);
+  btnManualPair.disabled = true;
+  btnManualPair.textContent = 'CONNECTING...';
+
+  try {
+    const res = await fetch('/api/plug/pair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ip: cleanIp,
+        username: username ? username.trim() : undefined,
+        password: password ? password.trim() : undefined
+      })
+    });
+    const result = await res.json();
+    if (result.ok && result.data) {
+      showPairStatus(`✔ PAIRED: Connected to ${result.data.model || 'Smart Plug'} (${cleanIp})`, true);
+      updateHardwareUI(result.data);
+      appendChatMessage('assistant', `Wireless link established, Sir. Paired with ${result.data.model} at ${cleanIp}. Real-time telemetry is now active.`);
+    } else {
+      showPairStatus(`✖ FAILED: ${result.error || 'Connection timed out'}`, false);
+      appendChatMessage('assistant', `Pairing failed for ${cleanIp}. Verify the plug is powered on and that 'Third-Party Compatibility' is enabled in your Tapo App.`);
+    }
+  } catch (err) {
+    showPairStatus(`✖ NETWORK ERROR: ${err.message}`, false);
+  } finally {
+    btnManualPair.disabled = false;
+    btnManualPair.textContent = '⚡ PAIR & CONNECT';
+  }
+}
+
+function showPairStatus(msg, isSuccess) {
+  if (!pairStatusMessage) return;
+  pairStatusMessage.textContent = msg;
+  pairStatusMessage.className = 'pair-status-msg ' + (isSuccess === true ? 'success' : isSuccess === false ? 'error' : '');
+}
+
+btnManualPair.addEventListener('click', () => {
+  pairDevice(inputTargetIp.value, inputTapoUser.value, inputTapoPass.value);
+});
+
+inputTargetIp.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') pairDevice(inputTargetIp.value, inputTapoUser.value, inputTapoPass.value);
+});
+
+// 4. Hardware Power & Lighting Controls
 btnPowerToggle.addEventListener('click', async () => {
   btnPowerToggle.style.transform = 'scale(0.92)';
   setTimeout(() => btnPowerToggle.style.transform = '', 150);
+
+  if (!isDeviceConnected) {
+    showPairStatus('Cannot toggle: No hardware connected. Enter your plug IP above and click PAIR.', false);
+    appendChatMessage('assistant', 'Unable to toggle power, Sir. No physical smart plug is currently paired. Please enter your plug\'s IP address above and click Pair.');
+    return;
+  }
+
   try {
     const res = await fetch('/api/plug/toggle', { method: 'POST' });
     const data = await res.json();
@@ -118,6 +186,8 @@ btnPowerToggle.addEventListener('click', async () => {
       btnPowerToggle.classList.toggle('active', isPowerOn);
       powerStateText.textContent = isPowerOn ? 'ON' : 'OFF';
       powerStateText.classList.toggle('on', isPowerOn);
+    } else {
+      showPairStatus(`Toggle failed: ${data.error || 'Hardware unreachable'}`, false);
     }
   } catch (err) {
     console.error('Error toggling power:', err);
@@ -129,6 +199,7 @@ sliderBrightness.addEventListener('input', (e) => {
 });
 
 sliderBrightness.addEventListener('change', async (e) => {
+  if (!isDeviceConnected) return;
   try {
     await fetch('/api/plug/brightness', {
       method: 'POST',
@@ -143,8 +214,8 @@ sliderBrightness.addEventListener('change', async (e) => {
 // Color Presets
 document.querySelectorAll('.color-dot').forEach(btn => {
   btn.addEventListener('click', async () => {
+    if (!isDeviceConnected) return;
     const [r, g, b] = btn.getAttribute('data-rgb').split(',').map(Number);
-    // Simple RGB to HSV approximation
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
     let h = 0, s = max === 0 ? 0 : (max - min) / max * 100, v = max / 255 * 100;
     if (max !== min) {
@@ -167,37 +238,44 @@ document.querySelectorAll('.color-dot').forEach(btn => {
   });
 });
 
-// Wi-Fi Discovery
+// 5. Wi-Fi Subnet Discovery with 1-Click Pairing
 btnScanNet.addEventListener('click', async () => {
   btnScanNet.textContent = 'SCANNING...';
+  devicesList.innerHTML = '<div class="device-empty">Broadcasting discovery packet across local subnet...</div>';
+
   try {
     const res = await fetch('/api/plug/discover');
     const data = await res.json();
-    if (data.ok && data.devices) {
-      devicesList.innerHTML = '';
-      if (!data.devices || data.devices.length === 0) {
-        devicesList.innerHTML = '<div style="padding: 12px; color: #ff6b6b; font-size: 11px; text-align: center; border: 1px dashed rgba(255, 68, 68, 0.4); border-radius: 8px;">NO PHYSICAL HARDWARE DETECTED ON LOCAL WI-FI (0 FOUND)</div>';
-      } else {
-        data.devices.forEach(d => {
-          const item = document.createElement('div');
-          item.className = 'device-item';
-          item.innerHTML = `
-            <span class="dev-dot ${d.is_on ? 'on' : ''}"></span>
-            <span class="dev-name">${d.alias || d.model} (${d.ip})</span>
-            <span class="dev-tag">${d.has_energy ? 'ENERGY P110' : 'STANDARD'}</span>
-          `;
-          devicesList.appendChild(item);
+    devicesList.innerHTML = '';
+
+    if (data.ok && data.devices && data.devices.length > 0) {
+      data.devices.forEach(d => {
+        const item = document.createElement('div');
+        item.className = 'device-item';
+        item.innerHTML = `
+          <span class="dev-dot ${d.is_on ? 'on' : ''}"></span>
+          <span class="dev-name">${d.alias || d.model} (${d.ip})</span>
+          <button class="btn-pair-tag" data-ip="${d.ip}">⚡ PAIR DEVICE</button>
+        `;
+        item.querySelector('.btn-pair-tag').addEventListener('click', (e) => {
+          e.stopPropagation();
+          inputTargetIp.value = d.ip;
+          pairDevice(d.ip, inputTapoUser.value, inputTapoPass.value);
         });
-      }
+        devicesList.appendChild(item);
+      });
+    } else {
+      devicesList.innerHTML = '<div class="device-empty" style="color: #ff6b6b; border-color: rgba(255, 85, 85, 0.4);">NO TP-LINK HARDWARE DETECTED ON LOCAL SUBNET. Ensure device is plugged into power and connected to 2.4GHz Wi-Fi.</div>';
     }
   } catch (e) {
     console.error('Discovery error:', e);
+    devicesList.innerHTML = `<div class="device-empty" style="color: #ff5555;">Scan error: ${e.message}</div>`;
   } finally {
     btnScanNet.textContent = '⟳ SCAN WI-FI';
   }
 });
 
-// 4. Chat System
+// 6. Chat System
 function appendChatMessage(role, text) {
   const msgDiv = document.createElement('div');
   msgDiv.className = `chat-msg ${role}`;
@@ -238,11 +316,15 @@ chatInput.addEventListener('keydown', (e) => {
 document.querySelectorAll('.quick-chips .chip').forEach(chip => {
   chip.addEventListener('click', () => {
     const cmd = chip.getAttribute('data-cmd');
-    sendUserMessage(cmd);
+    if (cmd === 'scan wi-fi') {
+      btnScanNet.click();
+    } else {
+      sendUserMessage(cmd);
+    }
   });
 });
 
-// 5. Voice Toggle Button
+// 7. Voice Toggle Button
 btnVoiceToggle.addEventListener('click', async () => {
   isVoiceListening = !isVoiceListening;
   btnVoiceToggle.classList.toggle('active', isVoiceListening);

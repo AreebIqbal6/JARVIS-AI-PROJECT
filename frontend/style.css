@@ -37,10 +37,12 @@ body {
 .hud-container {
   width: 96vw;
   max-width: 1360px;
-  height: 94vh;
+  height: 90vh;
+  max-height: 860px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
 /* Header */
@@ -595,3 +597,80 @@ body {
   color: #000;
   box-shadow: 0 0 16px var(--cyan-glow);
 }
+
+/* Pair & Link Controls */
+.pair-input-group {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.pair-input-group .hud-input {
+  background: rgba(12, 18, 28, 0.85);
+  border: 1px solid rgba(77, 216, 255, 0.25);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.pair-input-group .hud-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan-glow);
+}
+
+.pair-status-msg {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  min-height: 18px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+  transition: all 0.3s;
+}
+
+.pair-status-msg.success {
+  color: #3fe08a;
+  text-shadow: 0 0 6px rgba(63, 224, 138, 0.4);
+}
+
+.pair-status-msg.error {
+  color: #ff5555;
+  text-shadow: 0 0 6px rgba(255, 85, 85, 0.4);
+}
+
+.device-empty {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 12px;
+  text-align: center;
+  border: 1px dashed rgba(77, 216, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(6, 10, 16, 0.4);
+}
+
+.btn-pair-tag {
+  background: rgba(77, 216, 255, 0.15);
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.05em;
+}
+
+.btn-pair-tag:hover {
+  background: var(--cyan);
+  color: #000;
+  box-shadow: 0 0 10px var(--cyan-glow);
+}
+

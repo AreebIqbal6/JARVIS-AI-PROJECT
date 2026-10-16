@@ -30,3 +30,8 @@ async def test_smart_device_lifecycle():
     if not status["data"]["connected"]:
         assert on_res["ok"] is False
         assert "unreachable" in on_res["error"]
+
+    # 4. Dynamic device pairing verification
+    pair_res = await controller.pair("192.168.1.250")
+    assert "ok" in pair_res
+    assert controller.ip == "192.168.1.250"

@@ -136,6 +136,40 @@ class JarvisChatbot:
                 "reply": reply,
             }
 
+        # 6. Dynamic Pairing via Chat
+        if "pair" in lower or "connect to" in lower or "link device" in lower:
+            import re
+            ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', lower)
+            if ip_match:
+                target_ip = ip_match.group(0)
+                res = await self.device.pair(target_ip)
+                if res["ok"]:
+                    model = res["data"].get("model", "Smart Device")
+                    reply = f"Device paired successfully, Sir. Connected to {model} at {target_ip}. Energy telemetry active."
+                else:
+                    reply = f"Pairing attempt failed for {target_ip}, Sir. {res.get('error', 'Device unreachable')}."
+                return {
+                    "action": "pair_device",
+                    "success": res["ok"],
+                    "data": res.get("data"),
+                    "reply": reply
+                }
+
+        # 7. Subnet Scan via Chat
+        if "scan wi-fi" in lower or "scan network" in lower or "discover" in lower or "find plugs" in lower or "find devices" in lower:
+            devices = await self.device.discover_devices()
+            if devices:
+                dev_summary = ", ".join([f"{d.get('alias') or d.get('model')} ({d.get('ip')})" for d in devices])
+                reply = f"Subnet scan completed, Sir. Discovered {len(devices)} hardware unit(s): {dev_summary}."
+            else:
+                reply = "Subnet scan completed, Sir. No TP-Link hardware detected on the local Wi-Fi. Ensure device is powered on."
+            return {
+                "action": "scan_devices",
+                "success": True,
+                "data": devices,
+                "reply": reply
+            }
+
         return {"action": None}
 
     async def chat(self, user_message: str) -> Dict[str, Any]:

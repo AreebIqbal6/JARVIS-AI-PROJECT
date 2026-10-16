@@ -91,6 +91,11 @@ async def startup_event():
 class ChatRequest(BaseModel):
     message: str
 
+class PairRequest(BaseModel):
+    ip: str
+    username: Optional[str] = None
+    password: Optional[str] = None
+
 class BrightnessRequest(BaseModel):
     brightness: int
 
@@ -117,6 +122,22 @@ async def chat_endpoint(req: ChatRequest):
         "reply": res["response"],
         "action": res.get("action")
     })
+    return res
+
+@app.post("/api/plug/pair")
+async def pair_endpoint(req: PairRequest):
+    """Dynamically pairs with a specified physical plug IP and optional Tapo credentials."""
+    res = await device.pair(req.ip, req.username, req.password)
+    status = await device.get_status()
+    await manager.broadcast({"type": "telemetry", "data": status["data"]})
+    if res["ok"]:
+        model_name = status["data"].get("model", "Smart Device")
+        await manager.broadcast({
+            "type": "chat_message",
+            "user": f"Pair device {req.ip}",
+            "reply": f"Wireless link established, Sir. Connected to {model_name} at {req.ip}. Real-time energy telemetry streaming.",
+            "action": "device_paired"
+        })
     return res
 
 @app.get("/api/plug/status")

@@ -33,17 +33,48 @@ class SmartDeviceController:
         self.username = username or os.getenv("TAPO_USERNAME", "")
         self.password = password or os.getenv("TAPO_PASSWORD", "")
 
-    async def _connect_device(self, timeout: float = 2.0):
+    async def _connect_device(self, timeout: float = 2.5):
         """Attempts direct local connection via python-kasa to physical hardware."""
         from kasa import Discover
+        dev = None
+        # If credentials provided, try authenticated discovery first (Tapo KLAP)
         if self.username and self.password:
-            dev = await Discover.discover_single(
-                self.ip, username=self.username, password=self.password
-            )
-        else:
-            dev = await Discover.discover_single(self.ip)
+            try:
+                dev = await Discover.discover_single(
+                    self.ip, username=self.username, password=self.password
+                )
+                await dev.update()
+                return dev
+            except Exception as e:
+                logger.debug(f"Authenticated discovery to {self.ip} failed ({e}). Retrying direct UDP...")
+        
+        # Try direct discovery (Kasa UDP port 9999 / open Tapo)
+        dev = await Discover.discover_single(self.ip)
         await dev.update()
         return dev
+
+    async def pair(self, ip: str, username: Optional[str] = None, password: Optional[str] = None) -> Dict[str, Any]:
+        """Dynamically pairs with a specific hardware IP address and optional credentials."""
+        target_ip = str(ip or "").strip()
+        if not target_ip:
+            return {"ok": False, "error": "IP address cannot be empty.", "data": None}
+
+        self.ip = target_ip
+        if username is not None:
+            self.username = username.strip()
+        if password is not None:
+            self.password = password.strip()
+
+        status = await self.get_status()
+        if status["ok"] and status["data"]["connected"]:
+            logger.info(f"Successfully paired with physical hardware at {self.ip} ({status['data']['model']})")
+            return {"ok": True, "data": status["data"], "error": None}
+        else:
+            return {
+                "ok": False,
+                "error": f"Failed to connect to device at {self.ip}. Ensure device is powered on, connected to the same Wi-Fi, and that 'Third-Party Compatibility' is enabled in the Tapo App.",
+                "data": status.get("data")
+            }
 
     async def get_status(self) -> Dict[str, Any]:
         """Reads and returns real-time telemetry from physical hardware."""

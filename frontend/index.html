@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>J.A.R.V.I.S. // Chatbot & Smart Home Controller</title>
+  <title>J.A.R.V.I.S. // Wireless Hardware Matrix & Chatbot</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,7 +27,7 @@
         </div>
         <div class="status-chip">
           <span class="pulse-dot" id="plugNetDot"></span>
-          <span>DEVICE: <b id="plugModel">Tapo P110</b> (<span id="plugIp">192.168.1.100</span>)</span>
+          <span>DEVICE: <b id="plugModel">Disconnected</b> (<span id="plugIp">None</span>)</span>
         </div>
         <button id="btnVoiceToggle" class="mic-hud-btn" title="Toggle Voice Recognition">
           <span class="mic-icon">🎙</span>
@@ -58,8 +58,8 @@
           </div>
           <div class="power-state-readout">
             <div class="state-label">RELAY STATUS</div>
-            <div class="state-val" id="powerStateText">OFF</div>
-            <div class="state-sub" id="hardwareType">Simulated Mode</div>
+            <div class="state-val" id="powerStateText">OFFLINE</div>
+            <div class="state-sub" id="hardwareType" style="color: #ff5555;">HARDWARE OFFLINE (NO MOCK)</div>
           </div>
         </div>
 
@@ -79,7 +79,7 @@
             </div>
             <div class="energy-box">
               <div class="metric-label">GRID VOLTAGE</div>
-              <div class="metric-val" id="valVolts">228.4 <span class="unit">V</span></div>
+              <div class="metric-val" id="valVolts">0.0 <span class="unit">V</span></div>
               <div class="metric-sub">50 Hz AC Line</div>
             </div>
             <div class="energy-box">
@@ -94,8 +94,8 @@
         <div class="bulb-block">
           <div class="section-title">SMART BULB AMBIENCE CONTROLS</div>
           <div class="slider-row">
-            <span>BRIGHTNESS: <b id="brightVal">100%</b></span>
-            <input type="range" id="sliderBrightness" min="1" max="100" value="100" />
+            <span>BRIGHTNESS: <b id="brightVal">0%</b></span>
+            <input type="range" id="sliderBrightness" min="1" max="100" value="0" />
           </div>
           <div class="color-presets">
             <button class="color-dot" style="background:#ffddaa;" data-rgb="255,220,170" title="Warm White"></button>
@@ -106,15 +106,20 @@
           </div>
         </div>
 
-        <!-- Discovered Subnet Devices List -->
+        <!-- Wireless Device Pairing & Discovery -->
         <div class="discovery-block">
-          <div class="section-title">LOCAL WI-FI SUBNET DISCOVERY</div>
+          <div class="section-title">PAIR &amp; LINK WIRELESS DEVICE</div>
+          <div class="pair-input-group">
+            <input type="text" id="inputTargetIp" class="hud-input" placeholder="Device IP Address (e.g. 192.168.1.50)..." />
+            <input type="text" id="inputTapoUser" class="hud-input" placeholder="Tapo Email (for P100/P110)..." />
+            <input type="password" id="inputTapoPass" class="hud-input" placeholder="Tapo Password..." />
+            <button id="btnManualPair" class="btn-primary">⚡ PAIR &amp; CONNECT</button>
+          </div>
+          <div id="pairStatusMessage" class="pair-status-msg"></div>
+
+          <div class="section-title" style="margin-top: 14px;">LOCAL WI-FI SUBNET DISCOVERY</div>
           <div class="devices-list" id="devicesList">
-            <div class="device-item">
-              <span class="dev-dot on"></span>
-              <span class="dev-name">Tapo P110 (192.168.1.100)</span>
-              <span class="dev-tag">LOCAL LINK</span>
-            </div>
+            <div class="device-empty">Click '⟳ SCAN WI-FI' to automatically locate all TP-Link devices on your network.</div>
           </div>
         </div>
       </section>
@@ -141,11 +146,12 @@
           <button class="chip" data-cmd="how much power is the plug drawing?">📊 Power Draw</button>
           <button class="chip" data-cmd="yahan bohat andhera hai">🌙 Bohat Andhera Hai</button>
           <button class="chip" data-cmd="dim brightness to 40 percent">💡 Dim to 40%</button>
+          <button class="chip" data-cmd="scan wi-fi">📡 Scan Subnet</button>
         </div>
 
         <!-- Interactive Chat Input -->
         <div class="chat-input-bar">
-          <input type="text" id="chatInput" placeholder="Speak or enter command (e.g. 'Turn on desk lamp', 'Batti jalao')..." autocomplete="off" />
+          <input type="text" id="chatInput" placeholder="Speak or enter command (e.g. 'Turn on desk lamp', 'Batti jalao', 'Pair device at 192.168.1.50')..." autocomplete="off" />
           <button id="btnSend" class="btn-primary">[TRANSMIT ⇧]</button>
         </div>
       </section>
