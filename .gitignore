@@ -1,0 +1,21 @@
+# Environments & Dependencies
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local secrets & credentials
+.env
+.env.local
+
+# Logs and runtime artifacts
+*.log
+*.tmp
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/

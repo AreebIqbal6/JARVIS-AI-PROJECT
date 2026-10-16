@@ -1,0 +1,44 @@
+import asyncio
+from kasa_controller import SmartDeviceController
+from chatbot import JarvisChatbot
+
+async def test_bilingual_smart_plug_intents():
+    device = SmartDeviceController(ip="192.168.1.100")
+    bot = JarvisChatbot(device)
+
+    # 1. Turn ON via English
+    res1 = await bot.chat("Please turn on the smart plug.")
+    assert res1["action"] == "turn_on"
+    assert "restored" in res1["response"].lower() or "light" in res1["response"].lower()
+
+    # 2. Turn OFF via English
+    res2 = await bot.chat("Turn off the plug now.")
+    assert res2["action"] == "turn_off"
+    assert "off" in res2["response"].lower()
+
+    # 3. Turn ON via Urdu ("bohat andhera hai")
+    res3 = await bot.chat("Jarvis yahan bohat andhera hai")
+    assert res3["action"] == "turn_on"
+
+    # 4. Turn OFF via Urdu ("batti band kardo")
+    res4 = await bot.chat("Batti band kardo please")
+    assert res4["action"] == "turn_off"
+
+    # 5. Energy Telemetry Query
+    res5 = await bot.chat("How much power is the plug drawing in watts?")
+    assert res5["action"] == "energy_telemetry"
+    assert "watts" in res5["response"].lower()
+
+    # 6. Urdu Energy Query
+    res6 = await bot.chat("Kitni bijli use ho rahi hai?")
+    assert res6["action"] == "energy_telemetry"
+
+    # 7. Dimming
+    res7 = await bot.chat("Dim the light to 30 percent")
+    assert res7["action"] == "set_brightness"
+    assert res7["intent_data"]["level"] == 30
+
+    # 8. General conversational inquiry
+    res8 = await bot.chat("Who are you?")
+    assert res8["action"] is None
+    assert "j.a.r.v.i.s" in res8["response"].lower()

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>J.A.R.V.I.S. // Chatbot & Smart Home Controller</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="hud-container">
+    <!-- Top HUD Navigation Bar -->
+    <header class="hud-header">
+      <div class="brand-group">
+        <div class="arc-mini-orb"></div>
+        <div>
+          <span class="brand-title">J.A.R.V.I.S.</span>
+          <span class="brand-sub">// MARK II WIRELESS HARDWARE MATRIX</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="status-chip">
+          <span class="pulse-dot on"></span>
+          <span>SYSTEM: <b id="sysState">ONLINE</b></span>
+        </div>
+        <div class="status-chip">
+          <span class="pulse-dot" id="plugNetDot"></span>
+          <span>DEVICE: <b id="plugModel">Tapo P110</b> (<span id="plugIp">192.168.1.100</span>)</span>
+        </div>
+        <button id="btnVoiceToggle" class="mic-hud-btn" title="Toggle Voice Recognition">
+          <span class="mic-icon">🎙</span>
+          <span id="voiceBtnText">VOICE: STANDBY</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Dual-Column Tactical Layout -->
+    <main class="hud-main">
+      <!-- LEFT COLUMN: Wireless Hardware Terminal -->
+      <section class="card hardware-card">
+        <div class="card-header">
+          <div class="header-tag"><span class="sq"></span>WIRELESS PLUG &amp; BULB MATRIX</div>
+          <button id="btnScanNet" class="btn-ghost" title="Scan local subnet for Kasa/Tapo hardware">⟳ SCAN WI-FI</button>
+        </div>
+
+        <!-- Big Toggle Switch Unit -->
+        <div class="plug-hero-unit">
+          <div class="power-orb-wrapper">
+            <button id="btnPowerToggle" class="power-orb" title="Click to Toggle Power State">
+              <svg viewBox="0 0 100 100" class="orb-svg">
+                <circle cx="50" cy="50" r="44" class="ring-bg"></circle>
+                <circle cx="50" cy="50" r="44" class="ring-active" id="powerRing"></circle>
+              </svg>
+              <div class="power-icon">⏻</div>
+            </button>
+          </div>
+          <div class="power-state-readout">
+            <div class="state-label">RELAY STATUS</div>
+            <div class="state-val" id="powerStateText">OFF</div>
+            <div class="state-sub" id="hardwareType">Simulated Mode</div>
+          </div>
+        </div>
+
+        <!-- Real-Time Energy Telemetry Gauges (Tapo P110 / Kasa KP115) -->
+        <div class="telemetry-block">
+          <div class="section-title">REAL-TIME ENERGY TELEMETRY (P110)</div>
+          <div class="energy-grid">
+            <div class="energy-box">
+              <div class="metric-label">CURRENT POWER</div>
+              <div class="metric-val" id="valWatts">0.0 <span class="unit">W</span></div>
+              <div class="bar-track"><div class="bar-fill" id="fillWatts" style="width: 0%;"></div></div>
+            </div>
+            <div class="energy-box">
+              <div class="metric-label">TODAY'S USAGE</div>
+              <div class="metric-val" id="valKwh">0.000 <span class="unit">kWh</span></div>
+              <div class="metric-sub">Cumulative Draw</div>
+            </div>
+            <div class="energy-box">
+              <div class="metric-label">GRID VOLTAGE</div>
+              <div class="metric-val" id="valVolts">228.4 <span class="unit">V</span></div>
+              <div class="metric-sub">50 Hz AC Line</div>
+            </div>
+            <div class="energy-box">
+              <div class="metric-label">LOAD CURRENT</div>
+              <div class="metric-val" id="valAmps">0.00 <span class="unit">A</span></div>
+              <div class="metric-sub">Direct Amperage</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Smart Bulb Controls (Optional L530E Features) -->
+        <div class="bulb-block">
+          <div class="section-title">SMART BULB AMBIENCE CONTROLS</div>
+          <div class="slider-row">
+            <span>BRIGHTNESS: <b id="brightVal">100%</b></span>
+            <input type="range" id="sliderBrightness" min="1" max="100" value="100" />
+          </div>
+          <div class="color-presets">
+            <button class="color-dot" style="background:#ffddaa;" data-rgb="255,220,170" title="Warm White"></button>
+            <button class="color-dot" style="background:#4dd8ff;" data-rgb="77,216,255" title="Cyan / Stark Blue"></button>
+            <button class="color-dot" style="background:#ff3344;" data-rgb="255,50,70" title="Emergency Red"></button>
+            <button class="color-dot" style="background:#3fe08a;" data-rgb="63,224,138" title="Emerald Green"></button>
+            <button class="color-dot" style="background:#cc66ff;" data-rgb="204,102,255" title="Neon Purple"></button>
+          </div>
+        </div>
+
+        <!-- Discovered Subnet Devices List -->
+        <div class="discovery-block">
+          <div class="section-title">LOCAL WI-FI SUBNET DISCOVERY</div>
+          <div class="devices-list" id="devicesList">
+            <div class="device-item">
+              <span class="dev-dot on"></span>
+              <span class="dev-name">Tapo P110 (192.168.1.100)</span>
+              <span class="dev-tag">LOCAL LINK</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT COLUMN: J.A.R.V.I.S. Neural Chat Console -->
+      <section class="card chat-card">
+        <div class="card-header">
+          <div class="header-tag"><span class="sq"></span>J.A.R.V.I.S. // NEURAL DIALOGUE CORE</div>
+          <div class="ai-model-tag">GROQ LLAMA-3.3 // BILINGUAL EN/UR</div>
+        </div>
+
+        <!-- Chat Stream Log -->
+        <div class="chat-log" id="chatLog">
+          <div class="chat-msg assistant">
+            <div class="msg-author">J.A.R.V.I.S.</div>
+            <div class="msg-content">Good day, Sir. All wireless local subroutines are online. Standing by to manage your smart plug and answer your inquiries.</div>
+          </div>
+        </div>
+
+        <!-- Quick Action Commands -->
+        <div class="quick-chips">
+          <button class="chip" data-cmd="turn on the plug">⚡ Turn On Plug</button>
+          <button class="chip" data-cmd="turn off the plug">⏹ Turn Off Plug</button>
+          <button class="chip" data-cmd="how much power is the plug drawing?">📊 Power Draw</button>
+          <button class="chip" data-cmd="yahan bohat andhera hai">🌙 Bohat Andhera Hai</button>
+          <button class="chip" data-cmd="dim brightness to 40 percent">💡 Dim to 40%</button>
+        </div>
+
+        <!-- Interactive Chat Input -->
+        <div class="chat-input-bar">
+          <input type="text" id="chatInput" placeholder="Speak or enter command (e.g. 'Turn on desk lamp', 'Batti jalao')..." autocomplete="off" />
+          <button id="btnSend" class="btn-primary">[TRANSMIT ⇧]</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
