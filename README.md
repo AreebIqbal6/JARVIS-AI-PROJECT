@@ -98,7 +98,7 @@ Double-click `start.bat`. It will automatically:
 3. Install all dependencies from `requirements.txt`.
 4. Launch the FastAPI server with live WebSockets at `http://127.0.0.1:8000`.
 
-### Option B: Manual Command Line
+### Option B: Manual Command Line (Local LAN)
 ```bash
 # Clone the repository
 git clone https://github.com/AreebIqbal6/JARVIS-AI-PROJECT.git
@@ -119,13 +119,40 @@ Open your browser to: **`http://127.0.0.1:8000`**
 
 ---
 
-## 🎙️ Optional Hands-Free Voice Control
+## 🌐 Deploy Live to Vercel
 
-To run J.A.R.V.I.S. as a continuous hands-free voice assistant listening to your microphone:
-```bash
-python voice_agent.py
-```
-*Uses `sounddevice` to capture audio into RAM and `faster-whisper` (int8 quantized) on background CPU threads via `asyncio.to_thread()`—never freezing your async network loop.*
+You can make J.A.R.V.I.S. live on the web and access it from your phone, laptop, or anywhere globally:
+
+1. **Push to GitHub**: Make sure your repository is pushed to your GitHub account (`https://github.com/AreebIqbal6/JARVIS-AI-PROJECT`).
+2. **Import into Vercel**:
+   - Go to [vercel.com](https://vercel.com) and log in.
+   - Click **"Add New" > "Project"** and select `JARVIS-AI-PROJECT`.
+   - Vercel automatically detects the included `vercel.json` and Python Serverless runtime (`api/index.py`).
+3. **Set Environment Variables**:
+   In the Vercel deployment settings, add:
+   - `GROQ_API_KEY`: Your Groq API key (`gsk_...`)
+   - `DEVICE_IP` (optional): IP of your smart device
+   - `DEVICE_USERNAME` (optional): Tapo account email
+   - `DEVICE_PASSWORD` (optional): Tapo account password
+4. **Deploy**: Click **Deploy**. Your custom J.A.R.V.I.S. HUD will be live at `https://your-project.vercel.app`!
+
+### 📡 How Smart Plug Control Works Over the Web:
+- **Local Mode (Direct LAN on Wi-Fi):** When running locally at home (`http://127.0.0.1:8000`), J.A.R.V.I.S. communicates directly with your plug over your home Wi-Fi via UDP/KLAP encryption with instant 0-latency control.
+- **Vercel Cloud Mode:** When visiting your live Vercel URL, the AI Chatbot, bilingual voice recognition, speech synthesis, and HUD operate worldwide. Because smart plugs reside on private home IP addresses (`192.168.1.x`), controlling your home plug from outside your house simply requires running a free secure tunnel on your home PC (e.g. `ngrok http 8000`) or using J.A.R.V.I.S. when connected to your home Wi-Fi.
+
+---
+
+## 🎙️ Voice Control (Browser & Desktop)
+
+J.A.R.V.I.S. includes a dual-engine voice pipeline:
+1. **Universal Browser Web Speech**: Click the `[🎙️ VOICE: STANDBY]` button in the HUD. Any modern browser (Chrome, Edge, Safari, Android) will capture your voice directly with 0 CPU overhead, transcribe it, and speak back using high-fidelity speech synthesis.
+2. **Dedicated Background Desktop Listener (Optional)**:
+   Install the optional desktop audio packages:
+   ```bash
+   pip install -r requirements-voice.txt
+   python voice_agent.py
+   ```
+   *Continuously records via `sounddevice` and transcribes on background CPU threads via quantized `faster-whisper`.*
 
 ---
 

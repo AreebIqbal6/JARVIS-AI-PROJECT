@@ -37,35 +37,67 @@ const btnSend = document.getElementById('btnSend');
 const btnVoiceToggle = document.getElementById('btnVoiceToggle');
 const voiceBtnText = document.getElementById('voiceBtnText');
 
-// 1. WebSocket Telemetry & Chat Loop
+// 1. WebSocket Telemetry & Chat Loop with Serverless/Vercel Fallback
+let wsRetryCount = 0;
+const MAX_WS_RETRIES = 4;
+
 function initWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws`;
 
-  ws = new WebSocket(wsUrl);
+  try {
+    ws = new WebSocket(wsUrl);
 
-  ws.onopen = () => {
-    console.log('[J.A.R.V.I.S. WS] Connected to Core Telemetry.');
-  };
+    ws.onopen = () => {
+      console.log('[J.A.R.V.I.S. WS] Connected to Core Telemetry.');
+      wsRetryCount = 0;
+    };
 
-  ws.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'telemetry') {
-        updateHardwareUI(msg.data);
-      } else if (msg.type === 'chat_message') {
-        appendChatMessage('assistant', msg.reply);
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'telemetry') {
+          updateHardwareUI(msg.data);
+        } else if (msg.type === 'chat_message') {
+          appendChatMessage('assistant', msg.reply);
+          speakResponse(msg.reply);
+        }
+      } catch (e) {
+        console.error('[WS Parse Error]:', e);
       }
-    } catch (e) {
-      console.error('[WS Parse Error]:', e);
-    }
-  };
+    };
 
-  ws.onclose = () => {
-    console.warn('[J.A.R.V.I.S. WS] Disconnected. Reconnecting in 3s...');
-    plugNetDot.classList.remove('on');
-    setTimeout(initWebSocket, 3000);
-  };
+    ws.onclose = () => {
+      plugNetDot.classList.remove('on');
+      wsRetryCount++;
+      if (wsRetryCount <= MAX_WS_RETRIES) {
+        console.warn(`[J.A.R.V.I.S. WS] Connection inactive. Retry ${wsRetryCount}/${MAX_WS_RETRIES}...`);
+        setTimeout(initWebSocket, 3000);
+      } else {
+        console.log('[J.A.R.V.I.S.] Operating in Serverless HTTP Telemetry Sync mode.');
+      }
+    };
+
+    ws.onerror = () => {
+      // Gracefully handled by onclose and HTTP fallback
+    };
+  } catch (err) {
+    console.warn('[J.A.R.V.I.S.] WebSocket unavailable, defaulting to HTTP Sync.');
+  }
+}
+
+// Fallback HTTP polling for serverless clouds (Vercel) and sleeping websockets
+async function pollTelemetryFallback() {
+  if (ws && ws.readyState === WebSocket.OPEN) return;
+  try {
+    const res = await fetch('/api/plug/status');
+    const data = await res.json();
+    if (data && data.data) {
+      updateHardwareUI(data.data);
+    }
+  } catch (e) {
+    // Hardware offline or server sleep
+  }
 }
 
 // 2. Hardware UI Synchronization (Real Data Only)
@@ -287,6 +319,69 @@ function appendChatMessage(role, text) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+// Speech Synthesis (Audio Output)
+function speakResponse(text) {
+  if (!isVoiceListening || !window.speechSynthesis) return;
+  try {
+    window.speechSynthesis.cancel();
+    const cleanText = text.replace(/[*#◈_`]/g, '').trim();
+    if (!cleanText) return;
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => 
+      (v.lang && (v.lang.includes('en-GB') || v.lang.includes('en-US'))) && 
+      (v.name.includes('David') || v.name.includes('George') || v.name.includes('Daniel') || v.name.includes('Oliver') || v.name.includes('Natural'))
+    );
+    if (preferred) utterance.voice = preferred;
+    utterance.rate = 1.05;
+    utterance.pitch = 0.95;
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    console.debug('TTS note:', e);
+  }
+}
+
+// Ensure voices are loaded in Chromium browsers
+if (window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = () => {
+    window.speechSynthesis.getVoices();
+  };
+}
+
+// Browser Web Speech Recognition (Microphone Input)
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let browserRecognizer = null;
+
+if (SpeechRecognition) {
+  browserRecognizer = new SpeechRecognition();
+  browserRecognizer.continuous = true;
+  browserRecognizer.interimResults = false;
+  browserRecognizer.lang = 'en-US';
+
+  browserRecognizer.onresult = (event) => {
+    const lastResult = event.results[event.results.length - 1];
+    if (lastResult.isFinal) {
+      const transcript = lastResult[0].transcript.trim();
+      if (transcript) {
+        console.log('[Web Speech Captured]:', transcript);
+        sendUserMessage(transcript);
+      }
+    }
+  };
+
+  browserRecognizer.onerror = (e) => {
+    if (e.error !== 'no-speech') {
+      console.warn('[Web Speech Error]:', e.error);
+    }
+  };
+
+  browserRecognizer.onend = () => {
+    if (isVoiceListening) {
+      try { browserRecognizer.start(); } catch (e) {}
+    }
+  };
+}
+
 async function sendUserMessage(text) {
   const msg = text || chatInput.value.trim();
   if (!msg) return;
@@ -302,6 +397,7 @@ async function sendUserMessage(text) {
     });
     const data = await res.json();
     appendChatMessage('assistant', data.response);
+    speakResponse(data.response);
   } catch (err) {
     appendChatMessage('assistant', 'Telemetry connection failure. Operating offline, Sir.');
   }
@@ -324,31 +420,49 @@ document.querySelectorAll('.quick-chips .chip').forEach(chip => {
   });
 });
 
-// 7. Voice Toggle Button
+// 7. Voice Toggle Button (Hybrid Browser Web Speech + Desktop Fallback)
 btnVoiceToggle.addEventListener('click', async () => {
   isVoiceListening = !isVoiceListening;
   btnVoiceToggle.classList.toggle('active', isVoiceListening);
   
   if (isVoiceListening) {
     voiceBtnText.textContent = 'VOICE: ACTIVE';
+    
+    // 1. Try browser Web Speech first
+    if (browserRecognizer) {
+      try {
+        browserRecognizer.start();
+        appendChatMessage('assistant', 'Microphone audio feed initialized. Speak your commands, Sir.');
+        speakResponse('Microphone audio feed initialized. Speak your commands, Sir.');
+      } catch (err) {
+        console.debug('Browser speech start:', err);
+      }
+    }
+
+    // 2. Also notify backend voice service if running locally
     try {
       await fetch('/api/voice/start', { method: 'POST' });
-      appendChatMessage('assistant', 'Microphone audio feed initialized. Speak your commands, Sir.');
     } catch (e) {
-      console.error(e);
+      // Serverless or background
     }
   } else {
     voiceBtnText.textContent = 'VOICE: STANDBY';
+    if (browserRecognizer) {
+      try { browserRecognizer.stop(); } catch (e) {}
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     try {
       await fetch('/api/voice/stop', { method: 'POST' });
-      appendChatMessage('assistant', 'Voice listeners disengaged.');
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) {}
+    appendChatMessage('assistant', 'Voice listeners disengaged.');
   }
 });
 
 // Initialize on Load
 window.addEventListener('DOMContentLoaded', () => {
   initWebSocket();
+  pollTelemetryFallback();
+  setInterval(pollTelemetryFallback, 4000);
 });

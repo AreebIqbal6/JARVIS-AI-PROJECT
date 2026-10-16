@@ -45,25 +45,44 @@
           <button id="btnScanNet" class="btn-ghost" title="Scan local subnet for Kasa/Tapo hardware">⟳ SCAN WI-FI</button>
         </div>
 
-        <!-- Big Toggle Switch Unit -->
-        <div class="plug-hero-unit">
-          <div class="power-orb-wrapper">
-            <button id="btnPowerToggle" class="power-orb" title="Click to Toggle Power State">
-              <svg viewBox="0 0 100 100" class="orb-svg">
-                <circle cx="50" cy="50" r="44" class="ring-bg"></circle>
-                <circle cx="50" cy="50" r="44" class="ring-active" id="powerRing"></circle>
-              </svg>
-              <div class="power-icon">⏻</div>
-            </button>
+        <!-- Top Row: Relay Orb + Smart Bulb Ambience side-by-side -->
+        <div class="hardware-top-grid">
+          <!-- Big Toggle Switch Unit -->
+          <div class="plug-hero-unit">
+            <div class="power-orb-wrapper">
+              <button id="btnPowerToggle" class="power-orb" title="Click to Toggle Power State">
+                <svg viewBox="0 0 100 100" class="orb-svg">
+                  <circle cx="50" cy="50" r="44" class="ring-bg"></circle>
+                  <circle cx="50" cy="50" r="44" class="ring-active" id="powerRing"></circle>
+                </svg>
+                <div class="power-icon">⏻</div>
+              </button>
+            </div>
+            <div class="power-state-readout">
+              <div class="state-label">RELAY STATUS</div>
+              <div class="state-val" id="powerStateText">OFFLINE</div>
+              <div class="state-sub" id="hardwareType" style="color: #ff5555;">DISCONNECTED</div>
+            </div>
           </div>
-          <div class="power-state-readout">
-            <div class="state-label">RELAY STATUS</div>
-            <div class="state-val" id="powerStateText">OFFLINE</div>
-            <div class="state-sub" id="hardwareType" style="color: #ff5555;">HARDWARE OFFLINE (NO MOCK)</div>
+
+          <!-- Smart Bulb Controls (Optional L530E Features) -->
+          <div class="bulb-block">
+            <div class="section-title">SMART BULB AMBIENCE</div>
+            <div class="slider-row">
+              <span>LEVEL: <b id="brightVal">0%</b></span>
+              <input type="range" id="sliderBrightness" min="1" max="100" value="0" />
+            </div>
+            <div class="color-presets">
+              <button class="color-dot" style="background:#ffddaa;" data-rgb="255,220,170" title="Warm White"></button>
+              <button class="color-dot" style="background:#4dd8ff;" data-rgb="77,216,255" title="Cyan / Stark Blue"></button>
+              <button class="color-dot" style="background:#ff3344;" data-rgb="255,50,70" title="Emergency Red"></button>
+              <button class="color-dot" style="background:#3fe08a;" data-rgb="63,224,138" title="Emerald Green"></button>
+              <button class="color-dot" style="background:#cc66ff;" data-rgb="204,102,255" title="Neon Purple"></button>
+            </div>
           </div>
         </div>
 
-        <!-- Real-Time Energy Telemetry Gauges (Tapo P110 / Kasa KP115) -->
+        <!-- Real-Time Energy Telemetry Gauges (4 columns in 1 row) -->
         <div class="telemetry-block">
           <div class="section-title">REAL-TIME ENERGY TELEMETRY (P110)</div>
           <div class="energy-grid">
@@ -90,34 +109,18 @@
           </div>
         </div>
 
-        <!-- Smart Bulb Controls (Optional L530E Features) -->
-        <div class="bulb-block">
-          <div class="section-title">SMART BULB AMBIENCE CONTROLS</div>
-          <div class="slider-row">
-            <span>BRIGHTNESS: <b id="brightVal">0%</b></span>
-            <input type="range" id="sliderBrightness" min="1" max="100" value="0" />
-          </div>
-          <div class="color-presets">
-            <button class="color-dot" style="background:#ffddaa;" data-rgb="255,220,170" title="Warm White"></button>
-            <button class="color-dot" style="background:#4dd8ff;" data-rgb="77,216,255" title="Cyan / Stark Blue"></button>
-            <button class="color-dot" style="background:#ff3344;" data-rgb="255,50,70" title="Emergency Red"></button>
-            <button class="color-dot" style="background:#3fe08a;" data-rgb="63,224,138" title="Emerald Green"></button>
-            <button class="color-dot" style="background:#cc66ff;" data-rgb="204,102,255" title="Neon Purple"></button>
-          </div>
-        </div>
-
         <!-- Wireless Device Pairing & Discovery -->
         <div class="discovery-block">
           <div class="section-title">PAIR &amp; LINK WIRELESS DEVICE</div>
           <div class="pair-input-group">
-            <input type="text" id="inputTargetIp" class="hud-input" placeholder="Device IP Address (e.g. 192.168.1.50)..." />
-            <input type="text" id="inputTapoUser" class="hud-input" placeholder="Tapo Email (for P100/P110)..." />
+            <input type="text" id="inputTargetIp" class="hud-input" placeholder="Device IP (e.g. 192.168.1.50)..." />
+            <input type="text" id="inputTapoUser" class="hud-input" placeholder="Tapo Email (optional)..." />
             <input type="password" id="inputTapoPass" class="hud-input" placeholder="Tapo Password..." />
-            <button id="btnManualPair" class="btn-primary">⚡ PAIR &amp; CONNECT</button>
+            <button id="btnManualPair" class="btn-primary">⚡ PAIR DEVICE</button>
           </div>
           <div id="pairStatusMessage" class="pair-status-msg"></div>
 
-          <div class="section-title" style="margin-top: 14px;">LOCAL WI-FI SUBNET DISCOVERY</div>
+          <div class="section-title" style="margin-top: 6px;">LOCAL WI-FI SUBNET DISCOVERY</div>
           <div class="devices-list" id="devicesList">
             <div class="device-empty">Click '⟳ SCAN WI-FI' to automatically locate all TP-Link devices on your network.</div>
           </div>

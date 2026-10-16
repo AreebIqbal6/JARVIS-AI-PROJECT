@@ -1,0 +1,6 @@
+# Optional dependencies for local desktop microphone recording & offline neural STT (faster-whisper)
+# Install locally if running offline voice agent directly from Windows/Linux/macOS terminal:
+sounddevice>=0.4.6
+faster-whisper>=1.0.0
+pyttsx3>=2.90
+scipy>=1.12.0
