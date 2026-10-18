@@ -10,8 +10,8 @@
   --red: #ff4d61;
   --text-main: #edf2f7;
   --text-dim: #798da3;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --border-card: 1px solid rgba(77, 216, 255, 0.22);
 }
 

@@ -556,6 +556,16 @@ if (SpeechRecognition) {
     if (e.error !== 'no-speech') {
       console.warn('[Web Speech Error]:', e.error);
     }
+    if (e.error === 'network') {
+      const splashStatus = document.getElementById('splashStatusText');
+      if (splashStatus) splashStatus.textContent = 'CAMPUS WI-FI JITTER // USE CHIPS OR CONSOLE';
+      // Automatically retry after 1.5 seconds if voice listening is still engaged
+      if (isVoiceListening) {
+        setTimeout(() => {
+          try { browserRecognizer.start(); } catch (err) {}
+        }, 1500);
+      }
+    }
     isRecognizing = false;
   };
 

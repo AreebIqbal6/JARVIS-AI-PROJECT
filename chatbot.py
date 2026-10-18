@@ -7,7 +7,7 @@ Bilingual English & Urdu intent parsing for smart plug and lighting controls.
 import os
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 from kasa_controller import SmartDeviceController
 
@@ -264,55 +264,138 @@ class JarvisChatbot:
                 "intent_data": intent,
             }
 
-        # If conversational question, route to Groq or Gemini
-        ai_reply = None
-        if self._groq_client:
-            models_to_try = [
-                os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
-                "llama-3.3-70b-versatile",
-                "llama-3.1-8b-instant"
-            ]
-            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            messages.extend(self.history[-6:])
-            messages.append({"role": "user", "content": user_text})
-            for model_name in models_to_try:
+    @staticmethod
+    def _is_internet_available(timeout: float = 0.35) -> bool:
+        """Fast non-blocking check to verify internet reachability before initiating cloud LLM calls."""
+        import socket
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                # Public DNS port 53 probe
+                if s.connect_ex(("8.8.8.8", 53)) == 0:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    async def _query_cloud_llm(self, user_text: str) -> Optional[str]:
+        """Queries Groq or Gemini in worker thread with strict 2.0s presentation timeout to prevent freezing."""
+        import asyncio
+        def _sync_call() -> Optional[str]:
+            # 1. Try Groq
+            if self._groq_client:
+                models_to_try = [
+                    os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                    "llama-3.1-8b-instant"
+                ]
+                messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+                messages.extend(self.history[-4:])
+                messages.append({"role": "user", "content": user_text})
+                for model_name in models_to_try:
+                    try:
+                        resp = self._groq_client.chat.completions.create(
+                            model=model_name,
+                            messages=messages,
+                            temperature=0.7,
+                            max_tokens=200,
+                            timeout=1.8
+                        )
+                        text = resp.choices[0].message.content.strip()
+                        if text:
+                            return text
+                    except Exception as e:
+                        logger.debug(f"Groq API call ({model_name}) note: {e}")
+
+            # 2. Try Gemini
+            if self._gemini_client:
                 try:
-                    resp = self._groq_client.chat.completions.create(
-                        model=model_name,
-                        messages=messages,
-                        temperature=0.7,
-                        max_tokens=250,
+                    resp = self._gemini_client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=user_text,
+                        config={"system_instruction": SYSTEM_PROMPT}
                     )
-                    ai_reply = resp.choices[0].message.content.strip()
-                    if ai_reply:
-                        break
-                except Exception as e:
-                    logger.warning(f"Groq API call ({model_name}) note: {e}")
+                    if resp and resp.text:
+                        return resp.text.strip()
+                except Exception as ge:
+                    logger.debug(f"Gemini call note: {ge}")
+            return None
 
-        # Fallback to Google Gemini if Groq is unavailable or quota exceeded
-        if not ai_reply and self._gemini_client:
-            try:
-                resp = self._gemini_client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=user_text,
-                    config={"system_instruction": SYSTEM_PROMPT}
-                )
-                if resp and resp.text:
-                    ai_reply = resp.text.strip()
-            except Exception as ge:
-                logger.warning(f"Gemini fallback note: {ge}")
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(_sync_call), timeout=2.0)
+        except Exception:
+            logger.info("Cloud LLM response delayed by network lag. Seamlessly falling back to local presentation intelligence.")
+            return None
 
-        # Fallback to offline rule-based witty responses (Bilingual EN/UR)
+    def _get_local_presentation_response(self, user_text: str) -> str:
+        """
+        Rock-solid offline conversational matrix for class presentations.
+        Answers common academic and technical inquiries instantly (<5ms) with zero internet.
+        """
+        lower = user_text.lower().strip()
+
+        # 1. Class Presentation Introduction
+        if any(w in lower for w in ["introduce", "who are you", "who r u", "tell us about yourself", "class", "presentation", "demo", "overview", "taaruf", "kon ho", "tum kon", "kaun ho", "کون ہو"]):
+            return "Greetings, class. I am J.A.R.V.I.S., an autonomous smart environment controller and bilingual conversational system developed for this presentation. All local neural subroutines and IoT relays are operating nominally."
+
+        # 2. How it works / Technical Architecture / Technologies
+        if any(w in lower for w in ["how does it work", "how do you work", "architecture", "technologies", "tech stack", "backend", "framework", "how are you built", "kaise kaam", "kis tarah"]):
+            return "My architecture is built on an asynchronous Python FastAPI core, local Wi-Fi UDP and KLAP socket protocols for the TP-Link smart plug, sub-second deterministic intent routing, and a real-time reactive HUD connected via WebSockets."
+
+        # 3. Smart plug protocol & local control
+        if any(w in lower for w in ["protocol", "socket", "smart plug work", "communicate", "communication", "connect to plug", "kasa", "tapo", "udp", "klap", "hardware work"]):
+            return "I communicate directly with the TP-Link hardware over the local Wi-Fi subnet using port 9999 for Kasa devices and encrypted KLAP over HTTP for Tapo units. This eliminates cloud latency and allows instantaneous local power switching."
+
+        # 4. Offline Resilience / Internet lag & dropout questions
+        if any(w in lower for w in ["offline", "without internet", "no internet", "internet problem", "internet issue", "wifi problem", "internet chala jaye", "bina internet"]):
+            return "I am fully resilient to network dropouts, Sir. Local hardware relays and my deterministic bilingual intent matrix execute directly on this machine without relying on external cloud connectivity."
+
+        # 5. Who built you / Creators
+        if any(w in lower for w in ["who made you", "who built you", "creator", "developers", "team", "kisne banaya", "banaya kisne"]):
+            return "I was engineered by this student team as an advanced IoT automation and conversational AI platform for today's presentation."
+
+        # 6. Urdu language conversation
+        if any(w in lower for w in ["urdu", "urdu bol", "urdu bolo", "urdu aati hai", "اردو"]):
+            return "Ji bilkul, Sir! Main Roman Urdu aur Urdu script dono ba-asani samajhta hoon. Batti jalane se lekar bijli ki consumption tak, har cheez control ki ja sakti hai."
+
+        # 7. Energy & Power Draw explanation
+        if any(w in lower for w in ["how does energy work", "what is power draw", "telemetry explanation", "watts explanation", "bijli kaise"]):
+            return "The Tapo P110 and Kasa KP115 contain integrated energy monitoring chipsets. I query their local registers in real time to report active Watts, Volts, Amperes, and cumulative kWh consumption."
+
+        # 8. Greetings & Polite banter
+        if any(w in lower for w in ["hello", "hi", "hey", "salam", "assalam", "kese ho", "kaise ho", "kya haal", "good morning", "good afternoon", "سلام", "کیسے ہو", "کیا حال"]):
+            return "Good day, Sir. Main bilkul theek hoon. All local neural circuits and smart home relays are standing by."
+
+        if any(w in lower for w in ["thank", "shukriya", "shukria", "meherbani", "great job", "well done", "shabash", "شکریہ"]):
+            return "Always at your service, Sir. Khushi hui aapki madad kar ke."
+
+        # Default intelligent fallback
+        return f"Understood, Sir. Instruction received: '{user_text}'. All local hardware and presentation subroutines are standing by."
+
+    async def chat(self, user_message: str) -> Dict[str, Any]:
+        """Main chat handler with intent routing, presentation resilience, and conversational fallback."""
+        user_text = user_message.strip()
+        if not user_text:
+            return {"response": "I am standing by, Sir.", "action": None}
+
+        # Check for immediate hardware intent (100% local, <5ms)
+        intent = await self._execute_hardware_intent(user_text)
+        if intent["action"]:
+            self.history.append({"role": "user", "content": user_text})
+            self.history.append({"role": "assistant", "content": intent["reply"]})
+            return {
+                "response": intent["reply"],
+                "action": intent["action"],
+                "intent_data": intent,
+            }
+
+        # Check if internet is available before attempting cloud API
+        ai_reply = None
+        if self._is_internet_available(0.35):
+            ai_reply = await self._query_cloud_llm(user_text)
+
+        # Fallback to local presentation intelligence engine (0ms, 100% offline)
         if not ai_reply:
-            lower = user_text.lower()
-            if any(w in lower for w in ["hello", "hi", "hey", "salam", "assalam", "kese ho", "kaise ho", "kya haal", "سلام", "کیسے ہو", "کیا حال"]):
-                ai_reply = "Good day, Sir. Main bilkul theek hoon. All local neural circuits and smart home relays are operating nominally."
-            elif any(w in lower for w in ["who are you", "kon ho", "tum kon", "kaun ho", "کون ہو"]):
-                ai_reply = "I am J.A.R.V.I.S., your autonomous personal assistant and smart environment controller."
-            elif any(w in lower for w in ["thank", "shukriya", "shukria", "meherbani", "شکریہ"]):
-                ai_reply = "Always at your service, Sir. Khushi hui aapki madad kar ke."
-            else:
-                ai_reply = f"Understood, Sir. Telemetry confirms your instruction: '{user_text}'. All subroutines standing by."
+            ai_reply = self._get_local_presentation_response(user_text)
 
         self.history.append({"role": "user", "content": user_text})
         self.history.append({"role": "assistant", "content": ai_reply})
