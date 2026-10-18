@@ -60,12 +60,24 @@ async def main():
 
     # Test 4: Permanent Multi-Turn Memory & Persistence
     try:
-        print("\n[TEST 4/4] Testing Permanent Multi-Turn Memory & Disk Persistence...")
+        print("\n[TEST 4/5] Testing Permanent Multi-Turn Memory & Disk Persistence...")
         await test_chat_memory_persistence()
         print("  --> [PASS] Permanent Multi-Turn Memory Across Restarts Verified!")
         passed += 1
     except Exception as e:
         print(f"  --> [FAIL] Memory Persistence Failed: {e}")
+        traceback.print_exc()
+        failed += 1
+
+    # Test 5: Bilingual Voice Pipeline (Urdu & English STT + TTS)
+    try:
+        print("\n[TEST 5/5] Testing Bilingual Voice Pipeline (Urdu & English STT + TTS)...")
+        from tests.test_voice_bilingual import test_bilingual_voice_pipeline
+        await test_bilingual_voice_pipeline()
+        print("  --> [PASS] Bilingual Voice Pipeline (STT & TTS in English & Urdu) Verified!")
+        passed += 1
+    except Exception as e:
+        print(f"  --> [FAIL] Voice Pipeline Failed: {e}")
         traceback.print_exc()
         failed += 1
 

@@ -8,7 +8,7 @@ import os
 import json
 import logging
 from typing import Dict, Any, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -248,6 +248,19 @@ async def get_voice_audio(text: str = ""):
     if not mp3_bytes:
         raise HTTPException(status_code=500, detail="Neural audio synthesis failed")
     return Response(content=mp3_bytes, media_type="audio/mpeg")
+
+@app.post("/api/voice/transcribe")
+async def transcribe_audio_endpoint(
+    audio: UploadFile = File(...),
+    language: Optional[str] = None
+):
+    """Transcribes audio file (WebM / WAV / MP3) into English / Urdu text."""
+    contents = await audio.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty audio buffer")
+    filename = audio.filename or "recording.webm"
+    text = await voice.transcribe_audio_file(contents, filename, language)
+    return {"ok": True, "text": text}
 
 @app.post("/api/voice/speak")
 async def speak_voice_endpoint(req: SpeakRequest):

@@ -15,9 +15,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("VoiceAgent")
 load_dotenv()
 
+ROMAN_URDU_KEYWORDS = {
+    "batti", "kardo", "chalao", "shuru", "karo", "karen", "aapki", "madad",
+    "shukriya", "shukria", "meherbani", "andhera", "bohat", "bijli", "kitni",
+    "garmi", "sardi", "kaise", "haal", "theek", "khushi", "pankha", "kamra",
+    "jala", "band", "khol", "kholo", "suno", "sunao", "btao", "batao", "jee",
+    "ji", "bilkul", "sahib", "janab", "kijiye", "shabash", "accha", "achha",
+    "salaam", "salam", "urdu", "zaban", "alhamdulillah", "khuda hafiz"
+}
+
 def contains_urdu(text: str) -> bool:
+    """Detects whether text is in Urdu script or contains Roman Urdu phrasing."""
     import re
-    return bool(re.search(r'[\u0600-\u06FF]', text))
+    if re.search(r'[\u0600-\u06FF]', text):
+        return True
+    words = set(re.findall(r'[a-zA-Z]+', text.lower()))
+    return bool(words & ROMAN_URDU_KEYWORDS)
 
 class VoiceControlEngine:
     def __init__(self, chatbot, sample_rate: int = 16000, chunk_duration_sec: int = 3):
@@ -145,24 +158,15 @@ class VoiceControlEngine:
             logger.debug(f"Microphone recording stream check: {e}")
             return None
 
-    def transcribe_audio_chunk(self, audio_data: np.ndarray) -> str:
+    def transcribe_audio_chunk(self, audio_data: np.ndarray, language: Optional[str] = None) -> str:
         """Synchronously processes speech-to-text inference (Thread worker)."""
         if audio_data is None or len(audio_data) == 0:
             return ""
 
         # Check silence threshold
         energy = np.mean(np.abs(audio_data))
-        if energy < 0.015:  # Ambient room noise floor
+        if energy < 0.012:  # Ambient room noise floor
             return ""
-
-        # Option A: Local Faster-Whisper
-        if self._whisper_model:
-            try:
-                segments, _ = self._whisper_model.transcribe(audio_data, language="en", beam_size=1)
-                text = " ".join([seg.text for seg in segments]).strip()
-                return text
-            except Exception as e:
-                logger.warning(f"Faster-Whisper error: {e}")
 
         # Convert audio array to WAV buffer
         import io
@@ -172,23 +176,61 @@ class VoiceControlEngine:
         wav.write(buf, self.sample_rate, scaled)
         wav_bytes = buf.getvalue()
 
-        # Option B: Deepgram Nova-2 Cloud STT (<100ms ultra-low latency)
+        return self._transcribe_wav_bytes(wav_bytes, language=language)
+
+    async def transcribe_audio_file(self, file_bytes: bytes, filename: str = "audio.webm", language: Optional[str] = None) -> str:
+        """Asynchronously transcribes arbitrary audio bytes from client upload."""
+        import asyncio
+        return await asyncio.to_thread(self._transcribe_file_bytes_sync, file_bytes, filename, language)
+
+    def _transcribe_file_bytes_sync(self, file_bytes: bytes, filename: str, language: Optional[str] = None) -> str:
+        """Synchronous file-byte transcription worker."""
+        import io
+        groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GroqAPIKey")
+        if groq_key:
+            try:
+                from groq import Groq
+                buf = io.BytesIO(file_bytes)
+                buf.name = filename
+
+                client = Groq(api_key=groq_key)
+                kwargs = {
+                    "file": buf,
+                    "model": "whisper-large-v3",
+                    "prompt": "JARVIS, Areeb, smart plug, lights, turn on, turn off, batti jala do, batti band karo, bohat andhera hai, calculator kholo, awaz barhao, موسم, لائٹ"
+                }
+                if language in ["ur", "en"]:
+                    kwargs["language"] = language
+
+                transcription = client.audio.transcriptions.create(**kwargs)
+                txt = transcription.text.strip()
+                if txt:
+                    return txt
+            except Exception as e:
+                logger.debug(f"Groq Whisper file STT note: {e}")
+
+        # Fallback to Deepgram if available
         dg_key = os.getenv("DEEPGRAM_API_KEY")
         if dg_key:
             try:
                 import requests
-                headers = {"Authorization": f"Token {dg_key}", "Content-Type": "audio/wav"}
-                url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true"
-                resp = requests.post(url, headers=headers, data=wav_bytes, timeout=3.0)
+                headers = {"Authorization": f"Token {dg_key}", "Content-Type": "audio/webm"}
+                lang_param = f"&language={language}" if language in ["ur", "en"] else ""
+                url = f"https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true{lang_param}"
+                resp = requests.post(url, headers=headers, data=file_bytes, timeout=3.0)
                 if resp.status_code == 200:
                     dg_data = resp.json()
                     transcript = dg_data.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "").strip()
                     if transcript:
                         return transcript
             except Exception as dge:
-                logger.debug(f"Deepgram STT note: {dge}")
+                logger.debug(f"Deepgram file STT note: {dge}")
 
-        # Option C: Groq Whisper Cloud API (Large-v3 fallback)
+        return ""
+
+    def _transcribe_wav_bytes(self, wav_bytes: bytes, language: Optional[str] = None) -> str:
+        """Transcribes raw WAV bytes using Groq Whisper, Deepgram, or local model."""
+        import io
         groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GroqAPIKey")
         if groq_key:
             try:
@@ -197,14 +239,37 @@ class VoiceControlEngine:
                 buf_groq.name = "audio.wav"
 
                 client = Groq(api_key=groq_key)
-                transcription = client.audio.transcriptions.create(
-                    file=buf_groq,
-                    model="whisper-large-v3",
-                    prompt="JARVIS, smart plug, lights, turn on, turn off, bohat andhera hai",
-                )
-                return transcription.text.strip()
+                kwargs = {
+                    "file": buf_groq,
+                    "model": "whisper-large-v3",
+                    "prompt": "JARVIS, Areeb, smart plug, lights, turn on, turn off, batti jala do, batti band karo, bohat andhera hai, calculator kholo, awaz barhao, موسم, لائٹ"
+                }
+                if language in ["ur", "en"]:
+                    kwargs["language"] = language
+
+                transcription = client.audio.transcriptions.create(**kwargs)
+                txt = transcription.text.strip()
+                if txt:
+                    return txt
             except Exception as e:
-                logger.debug(f"Groq Whisper STT fallback note: {e}")
+                logger.debug(f"Groq Whisper STT note: {e}")
+
+        # Fallback to Deepgram Nova-2
+        dg_key = os.getenv("DEEPGRAM_API_KEY")
+        if dg_key:
+            try:
+                import requests
+                headers = {"Authorization": f"Token {dg_key}", "Content-Type": "audio/wav"}
+                lang_param = f"&language={language}" if language in ["ur", "en"] else ""
+                url = f"https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true{lang_param}"
+                resp = requests.post(url, headers=headers, data=wav_bytes, timeout=3.0)
+                if resp.status_code == 200:
+                    dg_data = resp.json()
+                    transcript = dg_data.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "").strip()
+                    if transcript:
+                        return transcript
+            except Exception as dge:
+                logger.debug(f"Deepgram STT note: {dge}")
 
         return ""
 
