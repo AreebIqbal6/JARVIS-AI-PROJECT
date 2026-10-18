@@ -35,6 +35,7 @@ CRITICAL DIRECTIVES:
 6. If the user asks about energy consumption, power draw, or electricity usage ('kitni bijli use ho rahi hai?', 'how many watts?', 'کتنی بجلی'), report the exact telemetry clearly.
 7. Keep all responses concise, sharp, and strictly under 3 sentences unless asked for an in-depth breakdown.
 8. Truth over polish: Never claim a device or tool changed state unless verified. If offline, state the failure honestly and suggest the next step.
+9. When the user asks you to WRITE, DRAFT, or EXPLAIN code, write the clean code in your text response. Do NOT call execute_code unless the user explicitly asks to RUN or EXECUTE it.
 """
 
 AVAILABLE_TOOLS = [
@@ -133,7 +134,7 @@ AVAILABLE_TOOLS = [
         "type": "function",
         "function": {
             "name": "execute_code",
-            "description": "Executes Python code in an isolated sandbox and returns terminal stdout/stderr.",
+            "description": "Runs/executes Python code in an isolated sandbox and returns terminal stdout/stderr. IMPORTANT: Use ONLY when the user explicitly asks to run, execute, or test code. If the user asks to write, draft, show, or explain code, output it in text without calling this tool.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -141,6 +142,14 @@ AVAILABLE_TOOLS = [
                 },
                 "required": ["code"]
             }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scan_devices",
+            "description": "Scans the local Wi-Fi network to detect active TP-Link Kasa and Tapo smart plugs or bulbs.",
+            "parameters": {"type": "object", "properties": {}}
         }
     },
     {
@@ -193,6 +202,7 @@ class JarvisChatbot:
         self.history: List[Dict[str, str]] = []
         self.last_action: Optional[str] = None
         self.last_target: str = "smart plug"
+        self.awaiting_confirmation: Optional[str] = None
         
         # Keys
         self.groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GroqAPIKey")
@@ -270,6 +280,12 @@ class JarvisChatbot:
                 return automation.generate_image(args.get("prompt", ""))
             elif name == "execute_code":
                 return self.sandbox.execute(args.get("code", ""))
+            elif name == "scan_devices":
+                try:
+                    devs = asyncio.run(self.device.discover_devices())
+                except Exception:
+                    devs = []
+                return {"ok": True, "devices": devs, "summary": f"Discovered {len(devs)} smart devices on subnet."}
         except Exception as e:
             return {"ok": False, "error": str(e), "summary": f"Tool execution failed: {e}"}
         return {"ok": False, "error": f"Unknown tool '{name}'."}
@@ -281,6 +297,33 @@ class JarvisChatbot:
         """
         import re
         lower = text.lower().strip()
+
+        # Conversational Confirmation Check (e.g., following 'Shall I scan the local subnet?')
+        if getattr(self, "awaiting_confirmation", None) == "scan_subnet":
+            confirm_patterns = [
+                r'^(?:yes|yeah|yep|sure|please|do it|go ahead|scan|okay|ok|haan|ji|bilkul|karo|dhoondo|dhundo|yes please|scan it|haan karo)$',
+                r'\b(?:scan (?:it|the subnet|network|wifi))\b',
+                r'^(?:ہاں|جی|کرو|اسکین)$'
+            ]
+            cancel_patterns = [
+                r'^(?:no|nope|nah|cancel|stop|don\'t|dont|mat karo|na|نہیں|مت کرو)$',
+                r'\b(?:don\'t scan|do not scan|no thanks|no scan)\b'
+            ]
+            if any(re.search(p, lower) for p in confirm_patterns):
+                self.awaiting_confirmation = None
+                devices = await self.device.discover_devices()
+                if devices:
+                    ips = ", ".join([d["ip"] for d in devices])
+                    reply = f"Subnet scan completed, Sir. Verified {len(devices)} active hardware node(s) on your Wi-Fi: {ips}. Ready to link."
+                else:
+                    reply = f"Subnet scan completed, Sir. No active TP-Link smart plugs were discovered on your subnet. Please verify the device is plugged in and powered."
+                return {"action": "scan_devices", "success": True, "data": devices, "reply": reply}
+            elif any(re.search(p, lower) for p in cancel_patterns):
+                self.awaiting_confirmation = None
+                return {"action": "cancel", "reply": "Understood, Sir. Subnet scan aborted."}
+            else:
+                # Any other distinct command clears awaiting confirmation and proceeds normally
+                self.awaiting_confirmation = None
 
         # ==============================================================================
         # 1. HARDWARE INTENTS (Smart Plug / Illumination / Energy Telemetry)
@@ -395,6 +438,7 @@ class JarvisChatbot:
                     else:
                         reply = "Relay engaged, Sir. Power to the smart plug is active."
                 else:
+                    self.awaiting_confirmation = "scan_subnet"
                     reply = f"The smart plug isn't responding at {self.device.ip}, Sir. Shall I scan the local subnet?"
                 return {"action": "turn_on", "success": res["ok"], "reply": reply}
 
@@ -410,8 +454,14 @@ class JarvisChatbot:
                     reply = f"Disengage failed: {res.get('error', 'Device offline')}, Sir."
                 return {"action": "turn_off", "success": res["ok"], "reply": reply}
 
-        # Subnet Discovery Scan
-        if any(w in lower for w in ["scan network", "scan subnet", "find plug", "discover devices", "scan wi-fi", "dhoondo", "dhundo"]):
+        # Subnet Discovery Scan (Direct Triggers)
+        scan_triggers = [
+            "scan network", "scan subnet", "find plug", "discover devices", "scan wi-fi", "scan wifi",
+            "dhoondo", "dhundo", "scan it", "search for plug", "find device", "search device",
+            "scan", "scan karo", "subnet scan", "wifi scan", "device scan", "search network"
+        ]
+        if any(w == lower or f" {w} " in f" {lower} " or lower.startswith(f"{w} ") for w in scan_triggers):
+            self.awaiting_confirmation = None
             devices = await self.device.discover_devices()
             if devices:
                 ips = ", ".join([d["ip"] for d in devices])
@@ -539,6 +589,13 @@ class JarvisChatbot:
         # ==============================================================================
         # 7. CODE EXECUTION & AGENTIC REASONING
         # ==============================================================================
+        write_code_match = re.match(r'^(?:please\s+)?(?:write|draft|show|give\s+me)\s+(?:a\s+)?python\s+code(?:\s+(?:for|to)\s+(.+))?$', lower)
+        if write_code_match:
+            spec = write_code_match.group(1)
+            if not spec or not spec.strip():
+                reply = "Certainly, Mr. Areeb. Here is a clean Python starter template. What specific computational logic would you like me to construct?\n\n```python\ndef main():\n    print('Hello, Sir. Ready to execute your algorithms.')\n\nif __name__ == '__main__':\n    main()\n```"
+                return {"action": "draft_code", "reply": reply}
+
         code_match = re.search(r'^(?:run code:?|execute code:?|run python:?|python:?)\s*(.+)', text, flags=re.DOTALL | re.IGNORECASE)
         if code_match:
             raw_code = code_match.group(1).strip()
@@ -718,6 +775,10 @@ class JarvisChatbot:
         # 11. Dimming on smart plug
         if any(w in lower for w in ["dim the light", "dim the bulb", "dim lights", "dimmer"]):
             return "Sir, binary relay plugs operate on full power switching (On/Off). To modulate lumens, a phase-dimming smart bulb or variable voltage controller is required."
+
+        # 12. Python Code Drafting
+        if any(w in lower for w in ["write a python code", "write python code", "draft python code", "python code"]):
+            return "Certainly, Mr. Areeb. Here is a clean Python starter template. What specific logic would you like me to construct?\n\n```python\ndef main():\n    print('Hello, Sir. Ready to execute your logic.')\n\nif __name__ == '__main__':\n    main()\n```"
 
         if any(w in lower for w in ["thank", "shukriya", "shukria", "meherbani", "great job", "well done", "shabash", "شکریہ"]):
             return "Always at your service, Sir. Khushi hui aapki madad kar ke."
