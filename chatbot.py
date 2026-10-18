@@ -195,29 +195,7 @@ class JarvisChatbot:
                 "reply": reply,
             }
 
-        # 5. Smart Bulb Color Palette Control
-        color_map = {
-            "white": (0, 0, 100, "Pure White"),
-            "warm white": (35, 30, 100, "Warm White"),
-            "cyan": (190, 80, 100, "Cyan"),
-            "blue": (200, 90, 100, "Stark Blue"),
-            "red": (0, 95, 100, "Emergency Red"),
-            "green": (140, 80, 100, "Emerald Green"),
-            "purple": (280, 85, 100, "Neon Purple"),
-        }
-        for color_keyword, (h, s, v, color_label) in color_map.items():
-            if color_keyword in lower and ("color" in lower or "light" in lower or "bulb" in lower or "set" in lower or "make" in lower or "turn" in lower or "badlo" in lower):
-                res = await self.device.set_color_hsv(h, s, v)
-                reply = f"Shifting smart bulb ambience to {color_label}, Sir." if res["ok"] else f"Smart bulb set to {color_label}. (Hardware at {self.device.ip} offline)."
-                return {
-                    "action": "set_color",
-                    "color": color_label,
-                    "hsv": [h, s, v],
-                    "success": res["ok"],
-                    "reply": reply,
-                }
-
-        # 6. Device Status Check
+        # 5. Device Status Check
         if "is the plug on" in lower or "status" in lower or "plug status" in lower or "kya hal hai" in lower:
             status = await self.device.get_status()
             if status["ok"] and status["data"].get("connected"):
@@ -307,7 +285,10 @@ class JarvisChatbot:
             # 1. Try Groq
             if self._groq_client:
                 models_to_try = [
-                    os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                    os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
+                    "openai/gpt-oss-20b",
+                    "openai/gpt-oss-120b",
+                    "llama-3.3-70b-versatile",
                     "llama-3.1-8b-instant"
                 ]
                 messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -319,7 +300,7 @@ class JarvisChatbot:
                             model=model_name,
                             messages=messages,
                             temperature=0.7,
-                            max_tokens=200,
+                            max_tokens=150,
                             timeout=1.8
                         )
                         text = resp.choices[0].message.content.strip()

@@ -71,20 +71,12 @@
             </div>
           </div>
 
-          <!-- Smart Bulb Controls (Optional L530E Features) -->
+          <!-- Illumination Dimmer Controls -->
           <div class="bulb-block">
-            <div class="section-title">SMART BULB AMBIENCE</div>
+            <div class="section-title">ILLUMINATION INTENSITY</div>
             <div class="slider-row">
               <span>LEVEL: <b id="brightVal">100%</b></span>
               <input type="range" id="sliderBrightness" min="1" max="100" value="100" />
-            </div>
-            <div class="color-presets">
-              <button class="color-dot active-dot" style="background:#ffffff; box-shadow: 0 0 10px #ffffff;" data-rgb="255,255,255" data-name="PURE WHITE" title="Pure White (Default)"></button>
-              <button class="color-dot" style="background:#ffddaa;" data-rgb="255,220,170" data-name="WARM WHITE" title="Warm White"></button>
-              <button class="color-dot" style="background:#4dd8ff;" data-rgb="77,216,255" data-name="CYAN" title="Cyan / Stark Blue"></button>
-              <button class="color-dot" style="background:#ff3344;" data-rgb="255,50,70" data-name="EMERGENCY RED" title="Emergency Red"></button>
-              <button class="color-dot" style="background:#3fe08a;" data-rgb="63,224,138" data-name="EMERALD GREEN" title="Emerald Green"></button>
-              <button class="color-dot" style="background:#cc66ff;" data-rgb="204,102,255" data-name="NEON PURPLE" title="Neon Purple"></button>
             </div>
           </div>
         </div>
@@ -230,13 +222,13 @@
 
           <!-- Floating Telemetry HUD Readout directly underneath bulb -->
           <div class="bulb-telemetry-badge">
-            <div class="badge-title">PHOTON EMISSION SPECTRUM</div>
+            <div class="badge-title">ILLUMINATION TELEMETRY</div>
             <div class="badge-metric-row">
               <span class="badge-lumens" id="bulbLumenText">100% INTENSITY</span>
               <span class="badge-divider">|</span>
-              <span class="badge-color-name" id="bulbSpectrumText">PURE WHITE (#FFFFFF)</span>
+              <span class="badge-color-name" id="bulbSpectrumText">RELAY ACTIVE</span>
             </div>
-            <div class="badge-status-sub" id="bulbLinkText">SYNCED TO SMART BULB RELAY</div>
+            <div class="badge-status-sub" id="bulbLinkText">STANDBY // READY TO PAIR</div>
           </div>
         </div>
       </section>

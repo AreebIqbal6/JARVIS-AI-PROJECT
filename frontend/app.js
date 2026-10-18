@@ -52,25 +52,14 @@ const bulbLumenText = document.getElementById('bulbLumenText');
 const bulbSpectrumText = document.getElementById('bulbSpectrumText');
 const bulbLinkText = document.getElementById('bulbLinkText');
 
-// State for Smart Bulb Matrix (Pure White 100% by default)
-let currentBulbColor = { r: 255, g: 255, b: 255, hex: '#ffffff', name: 'PURE WHITE' };
+// State for Smart Bulb Matrix (Pure White default)
 let currentBulbBrightness = 100;
 let isBulbPowerOn = true;
 
-// Helper: Convert RGB components to 6-digit Hex code
-function rgbToHex(r, g, b) {
-  const toHex = (n) => {
-    const hex = Math.max(0, Math.min(255, Math.round(n))).toString(16);
-    return hex.length === 1 ? '0' + hex : hex;
-  };
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
-// Render dynamic brightness and color on the center light bulb graphic
+// Render dynamic brightness on the center light bulb graphic
 function updateBulbVisuals() {
   const factor = isBulbPowerOn ? (currentBulbBrightness / 100) : 0;
-  const hex = currentBulbColor.hex || '#ffffff';
-  const name = currentBulbColor.name || 'PURE WHITE';
+  const hex = '#ffffff';
 
   // 1. Center Glass Radial Gradient
   if (bulbCoreColor) {
@@ -104,8 +93,7 @@ function updateBulbVisuals() {
   // 3. Ambient Glow Backlight
   if (bulbAmbientGlow) {
     if (factor > 0) {
-      const { r, g, b } = currentBulbColor;
-      bulbAmbientGlow.style.background = `radial-gradient(circle, rgba(${r}, ${g}, ${b}, ${0.85 * factor}) 0%, rgba(${r}, ${g}, ${b}, ${0.35 * factor}) 40%, transparent 70%)`;
+      bulbAmbientGlow.style.background = `radial-gradient(circle, rgba(255, 255, 255, ${0.85 * factor}) 0%, rgba(255, 255, 255, ${0.35 * factor}) 40%, transparent 70%)`;
       bulbAmbientGlow.style.opacity = factor.toFixed(2);
       bulbAmbientGlow.style.filter = `blur(${Math.round(20 + factor * 22)}px)`;
     } else {
@@ -118,8 +106,7 @@ function updateBulbVisuals() {
     if (factor > 0) {
       const dropRadius = Math.round(10 + factor * 20);
       const alpha = (0.5 * factor).toFixed(2);
-      const { r, g, b } = currentBulbColor;
-      bulbSvg.style.filter = `drop-shadow(0 0 ${dropRadius}px rgba(${r}, ${g}, ${b}, ${alpha}))`;
+      bulbSvg.style.filter = `drop-shadow(0 0 ${dropRadius}px rgba(255, 255, 255, ${alpha}))`;
     } else {
       bulbSvg.style.filter = 'drop-shadow(0 0 6px rgba(0, 0, 0, 0.4))';
     }
@@ -131,8 +118,8 @@ function updateBulbVisuals() {
     bulbLumenText.style.color = factor > 0 ? '#ffffff' : '#798da3';
   }
   if (bulbSpectrumText) {
-    bulbSpectrumText.textContent = isBulbPowerOn ? `${name} (${hex.toUpperCase()})` : 'STANDBY MATRIX';
-    bulbSpectrumText.style.color = factor > 0 ? hex : '#798da3';
+    bulbSpectrumText.textContent = isBulbPowerOn ? 'RELAY ACTIVE' : 'RELAY STANDBY';
+    bulbSpectrumText.style.color = isBulbPowerOn ? 'var(--cyan)' : '#798da3';
   }
   if (bulbLinkText) {
     if (isDeviceConnected) {
@@ -365,44 +352,7 @@ sliderBrightness.addEventListener('change', async (e) => {
   }
 });
 
-// Color Presets
-document.querySelectorAll('.color-dot').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const rgbAttr = btn.getAttribute('data-rgb');
-    if (!rgbAttr) return;
-    const [r, g, b] = rgbAttr.split(',').map(Number);
-    const colorName = btn.getAttribute('data-name') || btn.getAttribute('title') || 'CUSTOM';
-    currentBulbColor = { r, g, b, hex: rgbToHex(r, g, b), name: colorName };
-    isBulbPowerOn = true;
 
-    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active-dot'));
-    btn.classList.add('active-dot');
-
-    updateBulbVisuals();
-
-    if (!isDeviceConnected) return;
-
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    let h = 0, s = max === 0 ? 0 : (max - min) / max * 100, v = max / 255 * 100;
-    if (max !== min) {
-      const d = max - min;
-      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
-      else if (max === g) h = (b - r) / d + 2;
-      else h = (r - g) / d + 4;
-      h *= 60;
-    }
-    try {
-      await fetch('/api/plug/color', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hue: Math.round(h), saturation: Math.round(s), value: Math.round(v) })
-      });
-      appendChatMessage('assistant', `Smart bulb ambience shifted to ${colorName}, Sir.`);
-    } catch (e) {
-      console.error(e);
-    }
-  });
-});
 
 // Interactive Center Bulb Click-to-Toggle
 if (bulbInteractiveWrap) {
