@@ -33,6 +33,27 @@ class SmartDeviceController:
         self.username = username or os.getenv("TAPO_USERNAME", "")
         self.password = password or os.getenv("TAPO_PASSWORD", "")
 
+    async def _is_reachable(self, timeout: float = 0.25) -> bool:
+        """Fast TCP probe to verify IP is responding on LAN before attempting slow Kasa/Tapo handshake."""
+        target_ip = str(self.ip or "").strip()
+        if not target_ip or target_ip in ("127.0.0.1", "0.0.0.0"):
+            return False
+        for port in (9999, 80, 443):
+            try:
+                _, writer = await asyncio.wait_for(
+                    asyncio.open_connection(target_ip, port),
+                    timeout=timeout
+                )
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+                return True
+            except Exception:
+                pass
+        return False
+
     async def _connect_device(self, timeout: float = 2.5):
         """Attempts direct local connection via python-kasa to physical hardware."""
         from kasa import Discover
@@ -78,6 +99,26 @@ class SmartDeviceController:
 
     async def get_status(self) -> Dict[str, Any]:
         """Reads and returns real-time telemetry from physical hardware."""
+        if not await self._is_reachable(0.25):
+            return {
+                "ok": False,
+                "error": f"Physical hardware at {self.ip} unreachable (offline)",
+                "data": {
+                    "connected": False,
+                    "is_on": False,
+                    "ip": self.ip,
+                    "model": "Unknown (Offline)",
+                    "device_type": "unknown",
+                    "hardware": "disconnected",
+                    "energy": {
+                        "current_watts": 0.0,
+                        "today_kwh": 0.0,
+                        "voltage_v": 0.0,
+                        "current_a": 0.0,
+                    },
+                    "brightness": 0,
+                },
+            }
         try:
             dev = await asyncio.wait_for(self._connect_device(), timeout=2.0)
             from kasa import Module
@@ -148,6 +189,12 @@ class SmartDeviceController:
 
     async def turn_on(self) -> Dict[str, Any]:
         """Dispatches real TURN_ON command to physical hardware with verification."""
+        if not await self._is_reachable(0.25):
+            return {
+                "ok": False,
+                "data": {"state": "offline", "verified": False, "ip": self.ip, "hardware": "disconnected"},
+                "error": f"Physical hardware at {self.ip} unreachable: device is offline.",
+            }
         try:
             logger.info(f"Dispatching wireless TURN_ON payload to physical device at {self.ip}...")
             dev = await asyncio.wait_for(self._connect_device(), timeout=2.5)
@@ -175,6 +222,12 @@ class SmartDeviceController:
 
     async def turn_off(self) -> Dict[str, Any]:
         """Dispatches real TURN_OFF command to physical hardware with verification."""
+        if not await self._is_reachable(0.25):
+            return {
+                "ok": False,
+                "data": {"state": "offline", "verified": False, "ip": self.ip, "hardware": "disconnected"},
+                "error": f"Physical hardware at {self.ip} unreachable: device is offline.",
+            }
         try:
             logger.info(f"Dispatching wireless TURN_OFF payload to physical device at {self.ip}...")
             dev = await asyncio.wait_for(self._connect_device(), timeout=2.5)
@@ -218,6 +271,8 @@ class SmartDeviceController:
     async def set_brightness(self, percent: int) -> Dict[str, Any]:
         """Adjusts real brightness on dimmable physical bulb or switch."""
         percent = max(1, min(100, int(percent)))
+        if not await self._is_reachable(0.25):
+            return {"ok": False, "data": None, "error": f"Cannot set brightness: Device at {self.ip} unreachable ({self.ip} is offline)"}
         try:
             dev = await asyncio.wait_for(self._connect_device(), timeout=2.5)
             from kasa import Module
@@ -232,6 +287,8 @@ class SmartDeviceController:
 
     async def set_color_hsv(self, h: int, s: int, v: int) -> Dict[str, Any]:
         """Sets real HSV color on physical Tapo bulb."""
+        if not await self._is_reachable(0.25):
+            return {"ok": False, "data": None, "error": f"Cannot set color: Device at {self.ip} unreachable ({self.ip} is offline)"}
         try:
             dev = await asyncio.wait_for(self._connect_device(), timeout=2.5)
             from kasa import Module

@@ -21,16 +21,20 @@ You possess native bilingual capabilities in English and Urdu (including Roman U
 
 CRITICAL DIRECTIVES:
 1. You have direct wireless hardware control over the user's TP-Link Kasa / Tapo Smart Plug and Smart Bulbs.
-2. When the user speaks to you in Urdu or Roman Urdu (e.g., 'kya haal hai', 'batti jala do', 'pankha chalao', 'shuru karo', 'kaise ho'), reply seamlessly in natural Roman Urdu or Urdu with J.A.R.V.I.S.'s signature polite, confident wit.
-3. If the user mentions darkness, turning on appliances, or says things like 'bohat andhera hai' / 'batti jala do' / 'turn on the desk lamp' / 'بتی جلا دو', execute the hardware command and confirm with crisp wit.
-4. If the user asks about energy consumption, power draw, or electricity usage ('kitni bijli use ho rahi hai?', 'how many watts?', 'کتنی بجلی'), report the exact telemetry clearly.
-5. Keep all responses concise, sharp, and strictly under 3 sentences unless asked for an in-depth breakdown.
+2. Result first: Report action outcomes in the very first sentence. Never lecture or say "As an AI...".
+3. When the user speaks to you in Urdu or Roman Urdu (e.g., 'kya haal hai', 'batti jala do', 'pankha chalao', 'shuru karo', 'kaise ho'), reply seamlessly in natural Roman Urdu or Urdu with J.A.R.V.I.S.'s signature polite, confident wit.
+4. If the user mentions darkness, turning on appliances, or says things like 'bohat andhera hai' / 'batti jala do' / 'turn on the desk lamp' / 'بتی جلا دو', execute the hardware command and confirm with crisp wit.
+5. If the user asks about energy consumption, power draw, or electricity usage ('kitni bijli use ho rahi hai?', 'how many watts?', 'کتنی بجلی'), report the exact telemetry clearly.
+6. Keep all responses concise, sharp, and strictly under 3 sentences unless asked for an in-depth breakdown.
+7. Truth over polish: Never claim a device changed state unless verified. If offline, state the failure honestly and suggest the next step.
 """
 
 class JarvisChatbot:
     def __init__(self, device_controller: SmartDeviceController):
         self.device = device_controller
         self.history: List[Dict[str, str]] = []
+        self.last_action: Optional[str] = None
+        self.last_target: str = "smart plug"
         self.groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GroqAPIKey")
         self.gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GeminiAPIKey")
         self._groq_client = None
@@ -57,12 +61,21 @@ class JarvisChatbot:
 
     async def _execute_hardware_intent(self, text: str) -> Dict[str, Any]:
         """
-        Parses text for hardware intents in English and Urdu.
-        Returns a dict with intent triggered and execution result.
+        Parses text for hardware intents in English and Urdu with sub-second execution,
+        pronoun resolution (it, that, again, back), compound commands, and honest reporting.
         """
+        import re
         lower = text.lower().strip()
 
-        # 1. Turn ON Intents (English, Roman Urdu, and Urdu script)
+        # Pronoun & repetition resolution
+        is_repeat = bool(re.search(r'\b(do\s+that\s+again|repeat\s+that|phir\s+se\s+karo|dobara\s+karo)\b', lower))
+        is_revert = bool(re.search(r'\b(switch\s+it\s+back|undo\s+that|reverse\s+that|wapas\s+karo|ulta\s+karo)\b', lower))
+
+        wants_power_change = False
+        target_state = None  # "on" or "off"
+
+        # 1. Turn ON triggers (English, Roman Urdu, and Urdu script)
+        on_regex = r'\b(?:turn\s+(?:it\s+|the\s+(?:smart\s*)?plug\s+)?on|switch\s+(?:it\s+|the\s+(?:smart\s*)?plug\s+)?on|power\s+(?:it\s+)?on|lights\s+on|plug\s+on)\b'
         on_triggers = [
             "turn on", "switch on", "power on", "lights on", "plug on",
             "andhera", "bohat andhera", "dark in here", "too dark",
@@ -70,9 +83,66 @@ class JarvisChatbot:
             "roshni karo", "roshni", "pankha chalao", "pankha chala", "chalu karo", "chalu kardo",
             "بتی جلا", "بتی آن", "آن کر", "چلا دو", "چلاؤ", "روشنائی", "روشنی", "اندھیرا", "لائٹ آن", "پلگ آن", "چالو کر"
         ]
-        if any(trigger in lower for trigger in on_triggers):
+        if re.search(on_regex, lower) or any(t in lower for t in on_triggers):
+            wants_power_change = True
+            target_state = "on"
+
+        # 2. Turn OFF triggers (English, Roman Urdu, and Urdu script)
+        off_regex = r'\b(?:turn\s+(?:it\s+|the\s+(?:smart\s*)?plug\s+)?off|switch\s+(?:it\s+|the\s+(?:smart\s*)?plug\s+)?off|power\s+(?:it\s+)?off|lights\s+off|plug\s+off)\b'
+        off_triggers = [
+            "turn off", "switch off", "power off", "lights off", "plug off",
+            "batti bujha", "batti bujhao", "batti band", "band kardo", "band karo", "off kardo", "off karo", "shut down lights",
+            "bujha do", "bujha", "pankha band", "andhera karo", "chalu band",
+            "بتی بجھا", "بتی بند", "بند کر", "بند کرو", "آف کر", "آف کرو", "لائٹ بند", "پلگ آف", "بجھا دو"
+        ]
+        if re.search(off_regex, lower) or any(t in lower for t in off_triggers):
+            wants_power_change = True
+            target_state = "off"
+
+        # Handle repetition / revert
+        if is_repeat and self.last_action:
+            wants_power_change = True
+            target_state = "on" if self.last_action == "turn_on" else "off"
+        elif is_revert and self.last_action:
+            wants_power_change = True
+            target_state = "off" if self.last_action == "turn_on" else "on"
+
+        # 3. Energy Monitoring Telemetry Intents
+        energy_triggers = [
+            "power draw", "watts", "energy", "consumption", "voltage", "current",
+            "electricity", "kitni bijli", "power consumption", "wattage", "kwh",
+            "bijli", "kitna power", "kitna watt",
+            "کتنی بجلی", "بجلی", "واٹ", "وولٹیج", "توانائی"
+        ]
+        wants_energy = any(trigger in lower for trigger in energy_triggers)
+
+        # Compound Command Execution: Power Change + Telemetry in single sentence
+        if wants_power_change and wants_energy:
+            if target_state == "on":
+                p_res = await self.device.turn_on()
+                self.last_action = "turn_on"
+            else:
+                p_res = await self.device.turn_off()
+                self.last_action = "turn_off"
+
+            e_status = await self.device.get_status()
+            if p_res["ok"]:
+                w = e_status["data"]["energy"]["current_watts"] if e_status["ok"] else 0.0
+                reply = f"Power restored to smart plug, Sir. Current draw is {w} Watts." if target_state == "on" else f"Power disengaged from smart plug, Sir. Current draw is {w} Watts."
+            else:
+                reply = f"The smart plug at {self.device.ip} isn't responding, Sir. Shall I scan the local network for available devices?"
+            return {
+                "action": f"turn_{target_state}_and_telemetry",
+                "success": p_res["ok"],
+                "reply": reply,
+                "data": e_status.get("data")
+            }
+
+        # Standalone Turn ON
+        if wants_power_change and target_state == "on":
             res = await self.device.turn_on()
-            reply = "Right away, Sir. Power has been restored to the smart plug. Let there be light." if res["ok"] else f"Unable to dispatch power, Sir. Physical smart plug at {self.device.ip} is unreachable on the local Wi-Fi."
+            self.last_action = "turn_on"
+            reply = "Right away, Sir. Power has been restored to the smart plug. Let there be light." if res["ok"] else f"The smart plug at {self.device.ip} isn't responding, Sir. Shall I scan the local network for available devices?"
             return {
                 "action": "turn_on",
                 "success": res["ok"],
@@ -80,16 +150,11 @@ class JarvisChatbot:
                 "reply": reply,
             }
 
-        # 2. Turn OFF Intents (English, Roman Urdu, and Urdu script)
-        off_triggers = [
-            "turn off", "switch off", "power off", "lights off", "plug off",
-            "batti bujha", "batti bujhao", "batti band", "band kardo", "band karo", "off kardo", "off karo", "shut down lights",
-            "bujha do", "bujha", "pankha band", "andhera karo", "chalu band",
-            "بتی بجھا", "بتی بند", "بند کر", "بند کرو", "آف کر", "آف کرو", "لائٹ بند", "پلگ آف", "بجھا دو"
-        ]
-        if any(trigger in lower for trigger in off_triggers):
+        # Standalone Turn OFF
+        if wants_power_change and target_state == "off":
             res = await self.device.turn_off()
-            reply = "Power disengaged, Sir. The smart plug is now switched off." if res["ok"] else f"Unable to cut power, Sir. Physical smart plug at {self.device.ip} is unreachable on the local Wi-Fi."
+            self.last_action = "turn_off"
+            reply = "Power disengaged, Sir. The smart plug is now switched off." if res["ok"] else f"The smart plug at {self.device.ip} isn't responding, Sir. Shall I scan the local network for available devices?"
             return {
                 "action": "turn_off",
                 "success": res["ok"],
@@ -97,14 +162,8 @@ class JarvisChatbot:
                 "reply": reply,
             }
 
-        # 3. Energy Monitoring Telemetry Intents (English, Roman Urdu, and Urdu script)
-        energy_triggers = [
-            "power draw", "watts", "energy", "consumption", "voltage", "current",
-            "electricity", "kitni bijli", "power consumption", "wattage", "kwh",
-            "bijli", "kitna power", "kitna watt",
-            "کتنی بجلی", "بجلی", "واٹ", "وولٹیج", "توانائی"
-        ]
-        if any(trigger in lower for trigger in energy_triggers):
+        # Standalone Energy Monitoring
+        if wants_energy:
             status = await self.device.get_status()
             if status["ok"] and status["data"].get("connected"):
                 energy = status["data"]["energy"]

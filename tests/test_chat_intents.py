@@ -50,3 +50,23 @@ async def test_bilingual_smart_plug_intents():
     res10 = await bot.chat("Who are you?")
     assert res10["action"] is None
     assert "j.a.r.v.i.s" in res10["response"].lower()
+
+    # 11. Conversational Memory & Pronoun: "Turn it on"
+    res11 = await bot.chat("Please turn it on")
+    assert res11["action"] == "turn_on"
+
+    # 12. Conversational Memory & Pronoun: "Turn it off"
+    res12 = await bot.chat("Turn it off")
+    assert res12["action"] == "turn_off"
+
+    # 13. Context repetition: "Do that again"
+    res13 = await bot.chat("Do that again")
+    assert res13["action"] == "turn_off"
+
+    # 14. Context revert: "Switch it back"
+    res14 = await bot.chat("Switch it back")
+    assert res14["action"] == "turn_on"
+
+    # 15. Compound Command: Power action + Telemetry inquiry in one sentence
+    res15 = await bot.chat("Turn on the plug and what is the power draw?")
+    assert res15["action"] == "turn_on_and_telemetry"
