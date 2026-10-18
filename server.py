@@ -104,6 +104,9 @@ class ColorRequest(BaseModel):
     saturation: int
     value: int
 
+class SpeakRequest(BaseModel):
+    text: str
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
     index_file = os.path.join(FRONTEND_DIR, "index.html")
@@ -203,6 +206,15 @@ async def stop_voice():
         voice_task.cancel()
         voice_task = None
     return {"ok": True, "status": "Voice loop stopped"}
+
+@app.post("/api/voice/speak")
+async def speak_voice_endpoint(req: SpeakRequest):
+    """Speaks out loud through host audio speakers via local TTS engine."""
+    clean = (req.text or "").replace("◈", "").replace("*", "").strip()
+    if clean:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, voice.speak, clean)
+    return {"ok": True}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

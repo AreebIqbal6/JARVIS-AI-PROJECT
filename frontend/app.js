@@ -163,7 +163,7 @@ function initWebSocket() {
           updateHardwareUI(msg.data);
         } else if (msg.type === 'chat_message') {
           appendChatMessage('assistant', msg.reply);
-          speakResponse(msg.reply, isVoiceListening);
+          speakResponse(msg.reply, true);
         }
       } catch (e) {
         console.error('[WS Parse Error]:', e);
@@ -459,62 +459,97 @@ function setSpeakingVisualState(active) {
 
 let isRecognizing = false;
 
-function speakResponse(text, force = false) {
-  if ((!isVoiceListening && !force) || !window.speechSynthesis) return;
+let browserVoices = [];
+function updateVoiceList() {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    browserVoices = window.speechSynthesis.getVoices();
+  }
+}
+updateVoiceList();
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = updateVoiceList;
+}
+
+function fallbackToBackendTTS(text) {
+  try {
+    fetch('/api/voice/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    }).catch(e => console.debug('Backend TTS note:', e));
+  } catch (e) {}
+}
+
+function speakResponse(text, force = true) {
+  if (!text) return;
   const now = Date.now();
-  if (text === lastSpokenText && (now - lastSpokenTime < 3500)) {
-    return; // Don't speak identical text twice within 3.5 seconds
+  if (text === lastSpokenText && (now - lastSpokenTime < 2500)) {
+    return; // Don't speak identical text twice within 2.5 seconds
   }
   lastSpokenText = text;
   lastSpokenTime = now;
-  try {
-    window.speechSynthesis.cancel();
-    let cleanText = text.replace(/[*#◈_`]/g, '').trim();
-    // Pronounce as "Jarvis" in audio while retaining "J.A.R.V.I.S." in written chat
-    cleanText = cleanText.replace(/J\.A\.R\.V\.I\.S\.?/gi, 'Jarvis');
-    if (!cleanText) return;
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v => 
-      (v.lang && (v.lang.includes('en-GB') || v.lang.includes('en-US'))) && 
-      (v.name.includes('David') || v.name.includes('George') || v.name.includes('Daniel') || v.name.includes('Oliver') || v.name.includes('Natural'))
-    );
-    if (preferred) utterance.voice = preferred;
-    utterance.rate = 1.05;
-    utterance.pitch = 0.95;
 
-    // Pulse and dissolve rings into 3D neural web while J.A.R.V.I.S. speaks
-    utterance.onstart = () => {
-      // Keep microphone active so user can say "Stop" at any moment to interrupt!
-      const splash = document.getElementById('splashScreen');
-      if (splash) splash.classList.remove('listening');
-      setSpeakingVisualState(true);
-    };
+  let cleanText = text.replace(/[*#◈_`]/g, '').trim();
+  cleanText = cleanText.replace(/J\.A\.R\.V\.I\.S\.?/gi, 'Jarvis');
+  if (!cleanText) return;
 
-    const handleSpeechFinish = () => {
-      setSpeakingVisualState(false);
-      const splash = document.getElementById('splashScreen');
-      const splashStatus = document.getElementById('splashStatusText');
-      if (isVoiceListening) {
-        if (splash) splash.classList.add('listening');
-        if (splashStatus) splashStatus.textContent = 'LISTENING... // SPEAK NOW';
-        if (browserRecognizer && !isRecognizing) {
-          try { browserRecognizer.start(); } catch (e) {}
-        }
-      } else {
-        if (splash) splash.classList.remove('listening');
-        if (splashStatus) splashStatus.textContent = 'NEURAL CORE ONLINE';
+  // 1. Browser SpeechSynthesis Engine
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
+
+      if (!browserVoices || browserVoices.length === 0) {
+        browserVoices = window.speechSynthesis.getVoices();
       }
-    };
 
-    utterance.onend = handleSpeechFinish;
-    utterance.onerror = handleSpeechFinish;
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      const preferred = browserVoices.find(v => 
+        (v.lang && (v.lang.includes('en-GB') || v.lang.includes('en-US'))) && 
+        (v.name.includes('David') || v.name.includes('George') || v.name.includes('Daniel') || v.name.includes('Oliver') || v.name.includes('Ryan') || v.name.includes('Natural') || v.name.includes('Google UK English Male'))
+      ) || browserVoices.find(v => v.lang && v.lang.startsWith('en')) || browserVoices[0];
 
-    window.speechSynthesis.speak(utterance);
-  } catch (e) {
-    console.debug('TTS note:', e);
-    setSpeakingVisualState(false);
+      if (preferred) utterance.voice = preferred;
+      utterance.rate = 1.05;
+      utterance.pitch = 0.95;
+
+      utterance.onstart = () => {
+        setSpeakingVisualState(true);
+      };
+
+      const handleSpeechFinish = () => {
+        setSpeakingVisualState(false);
+        const splash = document.getElementById('splashScreen');
+        const splashStatus = document.getElementById('splashStatusText');
+        if (isVoiceListening) {
+          if (splash) splash.classList.add('listening');
+          if (splashStatus) splashStatus.textContent = 'LISTENING... // SPEAK NOW';
+          if (browserRecognizer && !isRecognizing) {
+            try { browserRecognizer.start(); } catch (e) {}
+          }
+        } else {
+          if (splash) splash.classList.remove('listening');
+          if (splashStatus) splashStatus.textContent = 'NEURAL CORE ONLINE';
+        }
+      };
+
+      utterance.onend = handleSpeechFinish;
+      utterance.onerror = (err) => {
+        console.warn('Browser SpeechSynthesis blocked/errored, falling back to local host audio:', err);
+        handleSpeechFinish();
+        fallbackToBackendTTS(cleanText);
+      };
+
+      window.speechSynthesis.speak(utterance);
+      return;
+    } catch (e) {
+      console.warn('SpeechSynthesis error:', e);
+      setSpeakingVisualState(false);
+    }
   }
+
+  // 2. Fallback to Local Host Hardware Speaker (Python pyttsx3)
+  fallbackToBackendTTS(cleanText);
 }
 
 // Immediate Stop Interrupt Controller (English, Roman Urdu, Urdu Script, and ASR phonetic mishearings)
@@ -874,7 +909,7 @@ async function sendUserMessage(text) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       if (data && data.response) {
         appendChatMessage('assistant', data.response);
-        speakResponse(data.response, isVoiceListening);
+        speakResponse(data.response, true);
       }
     }
   } catch (err) {
