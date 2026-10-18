@@ -1,16 +1,18 @@
 """
-Automated Test Runner for J.A.R.V.I.S. Smart Plug & Chatbot Suite
+Automated Test Runner for J.A.R.V.I.S. Smart Plug, Automation & Agentic Suite
 """
 
 import asyncio
 import sys
+import unittest
 import traceback
 from tests.test_kasa_plug import test_smart_device_lifecycle
 from tests.test_chat_intents import test_bilingual_smart_plug_intents
+from tests.test_automation import TestAutomationSuite
 
 async def main():
     print("=" * 60)
-    print("  RUNNING J.A.R.V.I.S. SMART PLUG & CHATBOT TEST BATTERY")
+    print("  RUNNING J.A.R.V.I.S. MASTER HARDWARE & AUTOMATION TEST BATTERY")
     print("=" * 60)
     
     passed = 0
@@ -18,7 +20,7 @@ async def main():
 
     # Test 1: Smart Device Lifecycle
     try:
-        print("[TEST 1/2] Testing Wireless Smart Device Lifecycle (Kasa/Tapo)...")
+        print("[TEST 1/3] Testing Wireless Smart Device Lifecycle (Kasa/Tapo)...")
         await test_smart_device_lifecycle()
         print("  --> [PASS] Smart Device Lifecycle (ON, OFF, Toggle, Energy, Dim, Scan) Verified!")
         passed += 1
@@ -29,12 +31,29 @@ async def main():
 
     # Test 2: Bilingual Chatbot & Intent Routing
     try:
-        print("\n[TEST 2/2] Testing Bilingual Chatbot & Intent Routing (EN/UR)...")
+        print("\n[TEST 2/3] Testing Bilingual Chatbot & Intent Routing (EN/UR)...")
         await test_bilingual_smart_plug_intents()
         print("  --> [PASS] Bilingual Chatbot & Intent Routing (English, Urdu, Watts) Verified!")
         passed += 1
     except Exception as e:
         print(f"  --> [FAIL] Chatbot Intents Failed: {e}")
+        traceback.print_exc()
+        failed += 1
+
+    # Test 3: Automation & Agentic Reasoning Suite
+    try:
+        print("\n[TEST 3/3] Testing Desktop Automation, Sandbox & Compound Execution...")
+        suite = unittest.TestLoader().loadTestsFromTestCase(TestAutomationSuite)
+        runner = unittest.TextTestRunner(verbosity=0)
+        res = runner.run(suite)
+        if res.wasSuccessful():
+            print(f"  --> [PASS] Automation & Agentic Suite ({res.testsRun} tests) Verified!")
+            passed += 1
+        else:
+            print(f"  --> [FAIL] Automation & Agentic Suite Failures: {len(res.failures) + len(res.errors)}")
+            failed += 1
+    except Exception as e:
+        print(f"  --> [FAIL] Automation Suite Exception: {e}")
         traceback.print_exc()
         failed += 1
 

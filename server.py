@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from kasa_controller import SmartDeviceController
 from chatbot import JarvisChatbot
 from voice_agent import VoiceControlEngine
+import automation
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -106,6 +107,15 @@ class ColorRequest(BaseModel):
 
 class SpeakRequest(BaseModel):
     text: str
+
+class AppRequest(BaseModel):
+    app: str
+
+class CodeExecRequest(BaseModel):
+    code: str
+
+class AgentTaskRequest(BaseModel):
+    task: str
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
@@ -226,6 +236,72 @@ async def speak_voice_endpoint(req: SpeakRequest):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, voice.speak, clean)
     return {"ok": True}
+
+@app.post("/api/automation/open")
+async def open_app_endpoint(req: AppRequest):
+    """Opens a desktop application or website."""
+    res = automation.open_app(req.app)
+    await manager.broadcast({
+        "type": "chat_message",
+        "user": f"Open {req.app}",
+        "reply": res["summary"],
+        "action": "open_app"
+    })
+    return res
+
+@app.post("/api/automation/close")
+async def close_app_endpoint(req: AppRequest):
+    """Closes an active desktop application."""
+    res = automation.close_app(req.app)
+    await manager.broadcast({
+        "type": "chat_message",
+        "user": f"Close {req.app}",
+        "reply": res["summary"],
+        "action": "close_app"
+    })
+    return res
+
+@app.post("/api/automation/screenshot")
+async def screenshot_endpoint():
+    """Captures screenshot and opens in viewer."""
+    res = automation.take_screenshot()
+    await manager.broadcast({
+        "type": "chat_message",
+        "user": "Take screenshot",
+        "reply": res["summary"],
+        "action": "screenshot"
+    })
+    return res
+
+@app.get("/api/automation/diagnostics")
+async def diagnostics_endpoint():
+    """Returns CPU, RAM, Disk, and Battery telemetry."""
+    return automation.get_system_diagnostics()
+
+@app.post("/api/automation/execute_code")
+async def execute_code_endpoint(req: CodeExecRequest):
+    """Executes sandboxed Python code."""
+    res = bot.sandbox.execute(req.code)
+    msg = f"Sandbox execution: {res.get('output') or res.get('error')}"
+    await manager.broadcast({
+        "type": "chat_message",
+        "user": f"Run Python code: {req.code[:40]}...",
+        "reply": msg,
+        "action": "execute_code"
+    })
+    return res
+
+@app.post("/api/automation/agent_task")
+async def agent_task_endpoint(req: AgentTaskRequest):
+    """Solves multi-step agentic tasks with Python code verification."""
+    res = await bot.agent.solve_agent_task(req.task)
+    await manager.broadcast({
+        "type": "chat_message",
+        "user": f"Agent task: {req.task}",
+        "reply": res["response"],
+        "action": "agent_task"
+    })
+    return res
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

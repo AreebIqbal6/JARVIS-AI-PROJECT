@@ -187,6 +187,21 @@ class SmartDeviceController:
                 },
             }
 
+    async def get_energy(self) -> Dict[str, Any]:
+        """Reads real-time energy telemetry from physical hardware."""
+        status = await self.get_status()
+        if status["ok"] and status["data"]["connected"]:
+            return {
+                "ok": True,
+                "data": status["data"]["energy"],
+                "error": None
+            }
+        return {
+            "ok": False,
+            "error": status.get("error", "Hardware offline"),
+            "data": status["data"]["energy"]
+        }
+
     async def turn_on(self) -> Dict[str, Any]:
         """Dispatches real TURN_ON command to physical hardware with verification."""
         if not await self._is_reachable(0.25):
