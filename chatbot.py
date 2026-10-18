@@ -142,6 +142,47 @@ AVAILABLE_TOOLS = [
                 "required": ["code"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_news",
+            "description": "Fetches current real-time news headlines via NewsAPI or world news feeds.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "Optional news topic (e.g. 'technology', 'sports', 'world')"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_wolfram",
+            "description": "Queries Wolfram Alpha for mathematical, physical, scientific, or factual computation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Mathematical expression or scientific question"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_image",
+            "description": "Generates a photo or visual artwork from a text prompt and opens it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string", "description": "Description of the image to generate"}
+                },
+                "required": ["prompt"]
+            }
+        }
     }
 ]
 
@@ -157,6 +198,7 @@ class JarvisChatbot:
         self.groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GroqAPIKey")
         self.gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GeminiAPIKey")
         self.openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("OpenAI_API_Key")
+        self.cohere_key = os.getenv("COHERE_API_KEY") or os.getenv("CohereAPIKey")
         
         # Sub-engines
         self.sandbox = PythonSandbox()
@@ -166,6 +208,7 @@ class JarvisChatbot:
         self._groq_client = None
         self._gemini_client = None
         self._openai_client = None
+        self._cohere_client = None
         self._init_clients()
 
     def _init_clients(self):
@@ -194,6 +237,14 @@ class JarvisChatbot:
             except Exception as e:
                 logger.debug(f"OpenAI initialization skipped: {e}")
 
+        if self.cohere_key:
+            try:
+                import cohere
+                self._cohere_client = cohere.Client(api_key=self.cohere_key)
+                logger.info("Cohere AI client initialized successfully.")
+            except Exception as e:
+                logger.debug(f"Cohere initialization note: {e}")
+
     def _dispatch_tool(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """Dispatches an LLM tool call to the local automation modules."""
         try:
@@ -211,6 +262,12 @@ class JarvisChatbot:
                 return automation.get_weather(args.get("city", "Karachi"))
             elif name == "get_crypto_price":
                 return automation.get_crypto_price(args.get("coin", "bitcoin"))
+            elif name == "get_news":
+                return automation.get_news(args.get("topic"))
+            elif name == "query_wolfram":
+                return automation.query_wolfram(args.get("query", ""))
+            elif name == "generate_image":
+                return automation.generate_image(args.get("prompt", ""))
             elif name == "execute_code":
                 return self.sandbox.execute(args.get("code", ""))
         except Exception as e:
@@ -238,7 +295,8 @@ class JarvisChatbot:
         on_triggers = [
             "turn on", "switch on", "power on", "lights on", "plug on",
             "andhera", "bohat andhera", "dark in here", "too dark",
-            "batti jala", "batti jalao", "batti on", "light on", "chala do", "chalao", "on kardo", "on karo", "jala do",
+            "batti jala", "batti jalao", "batti on", "light on", "chala do", "chalao", "on kardo", "on karo", "jala do", "jalao",
+            "bijli jala", "bijli jalao", "bijli on",
             "roshni karo", "roshni", "pankha chalao", "pankha chala", "chalu karo", "chalu kardo",
             "بتی جلا", "بتی آن", "آن کر", "چلا دو", "چلاؤ", "روشنائی", "روشنی", "اندھیرا", "لائٹ آن", "پلگ آن", "چالو کر"
         ]
@@ -250,6 +308,7 @@ class JarvisChatbot:
         off_triggers = [
             "turn off", "switch off", "power off", "lights off", "plug off",
             "batti bujha", "batti bujhao", "batti band", "band kardo", "band karo", "off kardo", "off karo", "shut down lights",
+            "bijli band", "bijli bujha", "bijli bujhao", "bijli off",
             "bujha do", "bujha", "pankha band", "andhera karo", "chalu band",
             "بتی بجھا", "بتی بند", "بند کر", "بند کرو", "آف کر", "آف کرو", "لائٹ بند", "پلگ آف", "بجھا دو"
         ]
@@ -368,7 +427,7 @@ class JarvisChatbot:
             res = automation.take_screenshot()
             return {"action": "screenshot", "data": res.get("data"), "reply": res["summary"]}
 
-        if any(w in lower for w in ["system stats", "cpu usage", "ram usage", "battery stats", "pc stats", "diagnostics"]):
+        if any(w in lower for w in ["system stats", "cpu", "ram", "memory", "battery stats", "pc stats", "diagnostics", "system diagnostics"]):
             res = automation.get_system_diagnostics()
             return {"action": "diagnostics", "data": res.get("data"), "reply": res["summary"]}
 
@@ -399,13 +458,41 @@ class JarvisChatbot:
             return {"action": "play_youtube", "reply": res["summary"]}
 
         # ==============================================================================
-        # 6. PUBLIC UTILITIES (Weather, Crypto, Jokes, Facts)
+        # 6. PUBLIC UTILITIES (Weather, News, Wolfram Math, Images, Crypto, Jokes, Facts)
         # ==============================================================================
-        weather_match = re.search(r'(?:what(?:\'s| is) (?:the )?)?weather(?: in ([a-zA-Z\s]+))?', lower)
-        if weather_match and "weather" in lower:
-            city = weather_match.group(1).strip() if (weather_match and weather_match.group(1)) else "Karachi"
+        # Weather (OpenWeatherMap + Open-Meteo)
+        if any(w in lower for w in ["weather", "mausam", "temperature", "forecast", "kitni garmi", "kitni sardi", "how's the weather", "how is the weather"]):
+            city = "Karachi"
+            city_m = re.search(r'(?:in|for|of)\s+([a-zA-Z\s]+)', lower)
+            if city_m:
+                cand = city_m.group(1).strip()
+                if cand and cand not in ["karachi", "the", "today", "now", "pakistan"]:
+                    city = cand.split()[0].title()
             res = automation.get_weather(city)
             return {"action": "get_weather", "data": res.get("data"), "reply": res["summary"]}
+
+        # News (NewsAPI + RSS)
+        if any(w in lower for w in ["news", "headlines", "khabar", "khabrein", "latest update"]):
+            topic = None
+            topic_m = re.search(r'(?:about|on|regarding)\s+([a-zA-Z0-9\s]+)', lower)
+            if topic_m:
+                topic = topic_m.group(1).strip()
+            res = automation.get_news(topic)
+            return {"action": "get_news", "data": res.get("data"), "reply": res["summary"]}
+
+        # Wolfram Alpha / Math & Scientific Calculation
+        calc_triggers = ["calculate", "compute", "solve", "integrate", "derivative of", "square root of", "factorial of", "wolfram"]
+        math_match = re.match(r'^(?:what(?:\'s| is) )?([0-9\s\+\-\*\/\^\(\)\.x]+)$', lower)
+        if any(w in lower for w in calc_triggers) or (math_match and any(op in lower for op in ["+", "-", "*", "/", "^"])):
+            if not any(w in lower for w in ["plug", "ip", "code", "python", "folder"]):
+                res = automation.query_wolfram(text)
+                return {"action": "query_wolfram", "data": res.get("data"), "reply": res["summary"]}
+
+        # Image Generation (Pollinations AI)
+        img_triggers = ["generate image", "create image", "draw ", "make a picture", "tasweer banao"]
+        if any(lower.startswith(p) or f" {p}" in lower for p in img_triggers):
+            res = automation.generate_image(text)
+            return {"action": "generate_image", "data": res.get("data"), "reply": res["summary"]}
 
         crypto_match = re.search(r'(?:what(?:\'s| is) (?:the )?)?price of (bitcoin|ethereum|solana|doge|btc|eth|sol)', lower)
         if crypto_match:
@@ -465,9 +552,8 @@ class JarvisChatbot:
             if self._groq_client:
                 models_to_try = [
                     os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
-                    "openai/gpt-oss-20b",
-                    "llama-3.3-70b-versatile",
-                    "llama-3.1-8b-instant"
+                    "openai/gpt-oss-120b",
+                    "openai/gpt-oss-20b"
                 ]
                 messages = [{"role": "system", "content": SYSTEM_PROMPT}]
                 messages.extend(self.history[-4:])
@@ -523,7 +609,7 @@ class JarvisChatbot:
             if self._gemini_client:
                 try:
                     resp = self._gemini_client.models.generate_content(
-                        model="gemini-2.0-flash",
+                        model="gemini-3.8-flash",
                         contents=user_text,
                         config={"system_instruction": SYSTEM_PROMPT}
                     )
@@ -531,6 +617,20 @@ class JarvisChatbot:
                         return resp.text.strip()
                 except Exception as ge:
                     logger.debug(f"Gemini call note: {ge}")
+
+            # 3. Try Cohere
+            if self._cohere_client:
+                try:
+                    resp = self._cohere_client.chat(
+                        model="command-r-08-2024",
+                        message=user_text,
+                        preamble=SYSTEM_PROMPT,
+                        temperature=0.4
+                    )
+                    if resp and resp.text:
+                        return resp.text.strip()
+                except Exception as ce:
+                    logger.debug(f"Cohere call note: {ce}")
 
             return None
 

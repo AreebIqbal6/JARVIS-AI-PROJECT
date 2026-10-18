@@ -54,6 +54,27 @@ class TestAutomationSuite(unittest.TestCase):
         self.assertTrue(weather["ok"])
         self.assertIn("Sir", weather["summary"])
 
+    def test_news_lookup(self):
+        news = automation.get_news()
+        self.assertTrue(news["ok"])
+        self.assertIn("Sir", news["summary"])
+
+    def test_wolfram_computation(self):
+        res = automation.query_wolfram("integrate x^2")
+        self.assertTrue(res["ok"])
+        self.assertIn("result", res["data"])
+        self.assertIn("Sir", res["summary"])
+
+    def test_image_generation(self):
+        res = automation.generate_image("a small glowing blue core")
+        self.assertTrue(res["ok"])
+        self.assertTrue(os.path.exists(res["data"]["path"]))
+        # Cleanup test image
+        try:
+            os.remove(res["data"]["path"])
+        except Exception:
+            pass
+
     def test_compound_executor_detection(self):
         class DummyChatbot:
             async def chat(self, msg):

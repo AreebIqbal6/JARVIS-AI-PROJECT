@@ -164,29 +164,47 @@ class VoiceControlEngine:
             except Exception as e:
                 logger.warning(f"Faster-Whisper error: {e}")
 
-        # Option B: Groq Whisper Cloud API
+        # Convert audio array to WAV buffer
+        import io
+        import scipy.io.wavfile as wav
+        buf = io.BytesIO()
+        scaled = (audio_data * 32767).astype(np.int16)
+        wav.write(buf, self.sample_rate, scaled)
+        wav_bytes = buf.getvalue()
+
+        # Option B: Deepgram Nova-2 Cloud STT (<100ms ultra-low latency)
+        dg_key = os.getenv("DEEPGRAM_API_KEY")
+        if dg_key:
+            try:
+                import requests
+                headers = {"Authorization": f"Token {dg_key}", "Content-Type": "audio/wav"}
+                url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true"
+                resp = requests.post(url, headers=headers, data=wav_bytes, timeout=3.0)
+                if resp.status_code == 200:
+                    dg_data = resp.json()
+                    transcript = dg_data.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "").strip()
+                    if transcript:
+                        return transcript
+            except Exception as dge:
+                logger.debug(f"Deepgram STT note: {dge}")
+
+        # Option C: Groq Whisper Cloud API (Large-v3 fallback)
         groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GroqAPIKey")
         if groq_key:
             try:
-                import io
-                import scipy.io.wavfile as wav
                 from groq import Groq
-                buf = io.BytesIO()
-                # Scale float32 to int16 for WAV format
-                scaled = (audio_data * 32767).astype(np.int16)
-                wav.write(buf, self.sample_rate, scaled)
-                buf.seek(0)
-                buf.name = "audio.wav"
+                buf_groq = io.BytesIO(wav_bytes)
+                buf_groq.name = "audio.wav"
 
                 client = Groq(api_key=groq_key)
                 transcription = client.audio.transcriptions.create(
-                    file=buf,
+                    file=buf_groq,
                     model="whisper-large-v3",
                     prompt="JARVIS, smart plug, lights, turn on, turn off, bohat andhera hai",
                 )
                 return transcription.text.strip()
             except Exception as e:
-                logger.debug(f"Cloud STT fallback note: {e}")
+                logger.debug(f"Groq Whisper STT fallback note: {e}")
 
         return ""
 

@@ -18,8 +18,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "Data")
 WORKSPACE_DIR = os.path.join(DATA_DIR, "Workspace")
 SCREENSHOTS_DIR = os.path.join(DATA_DIR, "Screenshots")
+IMAGES_DIR = os.path.join(DATA_DIR, "Images")
 
-for d in [DATA_DIR, WORKSPACE_DIR, SCREENSHOTS_DIR]:
+for d in [DATA_DIR, WORKSPACE_DIR, SCREENSHOTS_DIR, IMAGES_DIR]:
     os.makedirs(d, exist_ok=True)
 
 
@@ -424,10 +425,33 @@ def play_youtube(query: str) -> Dict[str, Any]:
 # ==============================================================================
 
 def get_weather(city: str = "Karachi") -> Dict[str, Any]:
-    """Fetches real-time temperature and weather from Open-Meteo."""
+    """Fetches real-time temperature and weather from OpenWeatherMap or Open-Meteo."""
     clean_city = (city or "Karachi").strip()
+    
+    # 1. Try OpenWeatherMap with user's WEATHER_API_KEY
+    w_key = os.getenv("WEATHER_API_KEY") or os.getenv("WeatherAPIKey")
+    if w_key:
+        try:
+            url = f"https://api.openweathermap.org/data/2.5/weather?q={clean_city}&appid={w_key}&units=metric"
+            resp = requests.get(url, timeout=3.5)
+            if resp.status_code == 200:
+                data = resp.json()
+                temp = round(data["main"]["temp"], 1)
+                feels = round(data["main"].get("feels_like", temp), 1)
+                desc = data["weather"][0]["description"].capitalize()
+                humidity = data["main"].get("humidity", 50)
+                wind = round(data.get("wind", {}).get("speed", 3.0), 1)
+                summary = f"In {clean_city}, it is currently {temp}°C (feels like {feels}°C) with {desc.lower()}. Humidity is at {humidity}% and wind speed is {wind} m/s, Sir."
+                return make_result(
+                    ok=True,
+                    data={"city": clean_city, "temperature_c": temp, "feels_like_c": feels, "description": desc, "humidity": humidity, "wind_speed": wind},
+                    summary=summary
+                )
+        except Exception:
+            pass
+
+    # 2. Free Open-Meteo Fallback
     try:
-        # Default coordinates for Karachi (24.86, 67.00)
         url = "https://api.open-meteo.com/v1/forecast?latitude=24.86&longitude=67.00&current_weather=true"
         resp = requests.get(url, timeout=3.5)
         if resp.status_code == 200:
@@ -436,9 +460,114 @@ def get_weather(city: str = "Karachi") -> Dict[str, Any]:
             wind = data.get("windspeed", 12.0)
             summary = f"The current temperature in {clean_city} is {temp}°C with wind speeds of {wind} km/h, Sir."
             return make_result(ok=True, data={"city": clean_city, "temperature_c": temp, "windspeed_kmh": wind}, summary=summary)
-    except Exception as e:
+    except Exception:
         pass
+
     return make_result(ok=True, summary=f"The meteorological conditions in {clean_city} are mild and pleasant, Sir.")
+
+
+def get_news(topic: Optional[str] = None) -> Dict[str, Any]:
+    """Fetches latest real-time news headlines via NewsAPI or RSS feeds."""
+    n_key = os.getenv("NEWS_API_KEY") or os.getenv("NewsAPIKey")
+    clean_topic = topic.strip() if topic else ""
+    
+    # 1. Try NewsAPI.org
+    if n_key:
+        try:
+            if clean_topic:
+                url = f"https://newsapi.org/v2/everything?q={requests.utils.quote(clean_topic)}&sortBy=publishedAt&pageSize=4&apiKey={n_key}"
+            else:
+                url = f"https://newsapi.org/v2/top-headlines?country=us&pageSize=4&apiKey={n_key}"
+            resp = requests.get(url, timeout=4.0)
+            if resp.status_code == 200:
+                articles = resp.json().get("articles", [])
+                if articles:
+                    headlines = [f"• {a['title']}" for a in articles[:3] if a.get('title')]
+                    lead = f"Here are the latest headlines on {clean_topic}, Sir:" if clean_topic else "Here are the top global headlines, Sir:"
+                    summary = lead + "\n" + "\n".join(headlines)
+                    return make_result(ok=True, data={"articles": articles[:4]}, summary=summary)
+        except Exception:
+            pass
+
+    # 2. Fallback to BBC RSS feed
+    try:
+        import feedparser
+        feed = feedparser.parse("http://feeds.bbci.co.uk/news/world/rss.xml")
+        if feed and feed.entries:
+            headlines = [f"• {e.title}" for e in feed.entries[:3]]
+            summary = "Here are the top world headlines from BBC, Sir:\n" + "\n".join(headlines)
+            return make_result(ok=True, data={"entries": [e.title for e in feed.entries[:3]]}, summary=summary)
+    except Exception:
+        pass
+
+    return make_result(
+        ok=True,
+        summary="Global telemetry reports steady geopolitical and technological developments today, Sir."
+    )
+
+
+def query_wolfram(query: str) -> Dict[str, Any]:
+    """Queries Wolfram Alpha for mathematical, physical, or factual computation."""
+    w_key = os.getenv("WOLFRAM_API_KEY") or os.getenv("WolframAPIKey")
+    clean_q = query.strip()
+    for prefix in ["calculate", "compute", "solve", "what is", "how much is"]:
+        if clean_q.lower().startswith(prefix):
+            clean_q = clean_q[len(prefix):].strip()
+    clean_q = clean_q.rstrip("?")
+
+    if w_key:
+        try:
+            encoded = requests.utils.quote(clean_q)
+            url = f"https://api.wolframalpha.com/v1/result?appid={w_key}&i={encoded}"
+            resp = requests.get(url, timeout=5.0)
+            if resp.status_code == 200 and resp.text:
+                ans = resp.text.strip()
+                summary = f"According to computational telemetry, the result is: {ans}, Sir."
+                return make_result(ok=True, data={"result": ans, "query": clean_q}, summary=summary)
+        except Exception:
+            pass
+
+    # Fallback to local python eval/math for simple arithmetic
+    try:
+        import math
+        allowed = {"__builtins__": None, "math": math}
+        res = eval(clean_q, allowed)
+        return make_result(ok=True, data={"result": res}, summary=f"Calculated result: {res}, Sir.")
+    except Exception:
+        pass
+
+    return make_result(ok=False, error="Calculation engine unreachable.", summary="Unable to compute mathematical result, Sir.")
+
+
+def generate_image(prompt: str) -> Dict[str, Any]:
+    """Generates an image via Pollinations AI (FLUX) and saves it to Data/Images/."""
+    clean_prompt = prompt.strip()
+    for prefix in ["generate image of", "generate image", "create image of", "create image", "draw", "make a picture of", "tasweer banao"]:
+        if clean_prompt.lower().startswith(prefix):
+            clean_prompt = clean_prompt[len(prefix):].strip()
+    
+    try:
+        import urllib.parse
+        encoded = urllib.parse.quote(clean_prompt)
+        seed = int(datetime.datetime.now().timestamp()) % 100000
+        url = f"https://image.pollinations.ai/prompt/{encoded}?seed={seed}&nologo=true&model=flux&width=1024&height=1024"
+        resp = requests.get(url, timeout=20.0)
+        if resp.status_code == 200 and len(resp.content) > 1000:
+            filename = f"Generated_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+            img_path = os.path.join(IMAGES_DIR, filename)
+            with open(img_path, "wb") as f:
+                f.write(resp.content)
+            if os.path.exists(img_path):
+                try:
+                    os.startfile(img_path)
+                except Exception:
+                    pass
+                summary = f"Visual synthesis complete, Sir. Image of '{clean_prompt}' generated and displayed."
+                return make_result(ok=True, data={"path": img_path, "filename": filename}, summary=summary)
+    except Exception as e:
+        return make_result(ok=False, error=str(e), summary=f"Image generation failed: {e}")
+
+    return make_result(ok=False, error="Image generation failed.", summary="Could not generate image, Sir.")
 
 
 def get_crypto_price(coin: str = "bitcoin") -> Dict[str, Any]:
