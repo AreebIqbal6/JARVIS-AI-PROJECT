@@ -421,7 +421,7 @@ btnScanNet.addEventListener('click', async () => {
 let lastRenderedAssistant = '';
 let lastRenderedTime = 0;
 
-function appendChatMessage(role, text) {
+function appendChatMessage(role, text, saveLocally = true) {
   if (!text) return;
   const now = Date.now();
   if (role === 'assistant') {
@@ -440,6 +440,51 @@ function appendChatMessage(role, text) {
   `;
   chatLog.appendChild(msgDiv);
   chatLog.scrollTop = chatLog.scrollHeight;
+
+  if (saveLocally) {
+    try {
+      const stored = JSON.parse(localStorage.getItem('jarvis_chat_history') || '[]');
+      stored.push({ role, content: text, timestamp: new Date().toISOString() });
+      if (stored.length > 300) stored.splice(0, stored.length - 300);
+      localStorage.setItem('jarvis_chat_history', JSON.stringify(stored));
+    } catch (e) {
+      console.warn('LocalStorage save error:', e);
+    }
+  }
+}
+
+async function loadPersistentChatHistory() {
+  try {
+    const res = await fetch('/api/chat/history');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.history && data.history.length > 0) {
+        chatLog.innerHTML = ''; // Clear default initial placeholder
+        data.history.forEach(turn => {
+          appendChatMessage(turn.role, turn.content, false);
+        });
+        localStorage.setItem('jarvis_chat_history', JSON.stringify(data.history));
+        console.log(`[J.A.R.V.I.S.] Restored ${data.history.length} dialogue turns from persistent memory.`);
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn('[J.A.R.V.I.S.] Memory fetch offline, trying local storage cache:', err);
+  }
+
+  // Fallback to localStorage if server history is unavailable
+  try {
+    const local = JSON.parse(localStorage.getItem('jarvis_chat_history') || '[]');
+    if (local && local.length > 0) {
+      chatLog.innerHTML = '';
+      local.forEach(turn => {
+        appendChatMessage(turn.role, turn.content, false);
+      });
+      console.log(`[J.A.R.V.I.S.] Restored ${local.length} dialogue turns from browser local cache.`);
+    }
+  } catch (e) {
+    console.warn('Could not restore from local cache:', e);
+  }
 }
 
 // Speech Synthesis (Audio Output)
@@ -1371,6 +1416,7 @@ let neuralVisualizer = null;
 // Initialize on Load
 window.addEventListener('DOMContentLoaded', () => {
   initWebSocket();
+  loadPersistentChatHistory();
   pollTelemetryFallback();
   setInterval(pollTelemetryFallback, 4000);
   neuralVisualizer = new NeuralWebVisualizer('neuralWebCanvas');

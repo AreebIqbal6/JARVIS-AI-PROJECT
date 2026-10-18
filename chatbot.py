@@ -21,6 +21,11 @@ from agent_engine import PythonSandbox, JarvisAgent, CompoundExecutor
 logger = logging.getLogger("JarvisBrain")
 load_dotenv()
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "Data")
+os.makedirs(DATA_DIR, exist_ok=True)
+HISTORY_FILE = os.path.join(DATA_DIR, "chat_history.json")
+
 SYSTEM_PROMPT = """You are J.A.R.V.I.S., the hyper-intelligent, witty, and fiercely loyal AI assistant inspired by Tony Stark's JARVIS.
 Your creator and operator is Areeb (address him respectfully as 'Sir' or 'Mr. Areeb').
 Maintain a sharp, sophisticated British wit (voiced via en-GB-RyanNeural). Never be robotic.
@@ -199,11 +204,12 @@ AVAILABLE_TOOLS = [
 class JarvisChatbot:
     def __init__(self, device_controller: SmartDeviceController):
         self.device = device_controller
-        self.history: List[Dict[str, str]] = []
+        self.history_file = HISTORY_FILE
+        self.history: List[Dict[str, Any]] = self._load_history()
         self.last_action: Optional[str] = None
         self.last_target: str = "smart plug"
         self.awaiting_confirmation: Optional[str] = None
-        
+
         # Keys
         self.groq_key = os.getenv("GROQ_API_KEY") or os.getenv("GroqAPIKey")
         self.gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GeminiAPIKey")
@@ -220,6 +226,53 @@ class JarvisChatbot:
         self._openai_client = None
         self._cohere_client = None
         self._init_clients()
+
+    def _load_history(self) -> List[Dict[str, Any]]:
+        """Loads persistent conversation history from disk."""
+        if os.path.exists(self.history_file):
+            try:
+                with open(self.history_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        logger.info(f"Loaded {len(data)} historical chat records from permanent memory.")
+                        return data
+            except Exception as e:
+                logger.warning(f"Could not load chat history ({e}). Initializing fresh.")
+        return []
+
+    def _save_history(self):
+        """Atomically persists chat history to disk."""
+        try:
+            os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
+            temp_file = f"{self.history_file}.tmp"
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(self.history, f, indent=2, ensure_ascii=False)
+            os.replace(temp_file, self.history_file)
+        except Exception as e:
+            logger.warning(f"Failed to persist chat history: {e}")
+
+    def append_turn(self, role: str, content: str, action: Optional[str] = None):
+        """Appends a turn to in-memory history and persists to disk."""
+        import datetime
+        record = {
+            "role": role,
+            "content": content,
+            "action": action,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        self.history.append(record)
+        self._save_history()
+
+    def get_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Returns chat history, optionally limited to the most recent N items."""
+        if limit is not None and limit > 0:
+            return self.history[-limit:]
+        return list(self.history)
+
+    def clear_history(self):
+        """Clears memory both in-memory and on disk."""
+        self.history.clear()
+        self._save_history()
 
     def _init_clients(self):
         """Initializes AI SDK clients if keys are present."""
@@ -612,6 +665,24 @@ class JarvisChatbot:
             agent_res = await self.agent.solve_agent_task(task)
             return {"action": "agent_task", "data": agent_res, "reply": agent_res["response"]}
 
+        # Memory & History Recall Intents
+        if any(w in lower for w in [
+            "what was the last thing i asked", "what did i just ask", "what did i just say",
+            "pichli baat", "last question", "what was my last message"
+        ]):
+            user_turns = [h for h in self.history if h.get("role") == "user"]
+            if user_turns:
+                last_turn = user_turns[-1]["content"]
+                reply = f"Prior to this inquiry, you asked: '{last_turn}', Sir."
+            else:
+                reply = "This is our opening inquiry for the current session, Sir."
+            return {"action": "recall_history", "reply": reply}
+
+        if any(w in lower for w in ["do you remember our chat", "do you remember what we talked about", "do you remember me", "do you remember"]):
+            turn_count = len(self.history)
+            reply = f"Certainly, Mr. Areeb. My persistent memory banks have recorded all {turn_count} conversation events on disk. Every instruction and telemetry query remains cataloged, Sir."
+            return {"action": "recall_history", "reply": reply}
+
         return {"action": None}
 
     @staticmethod
@@ -641,7 +712,11 @@ class JarvisChatbot:
                     "openai/gpt-oss-20b"
                 ]
                 messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-                messages.extend(self.history[-4:])
+                for item in self.history[-20:]:
+                    r = "assistant" if item.get("role") == "assistant" else "user"
+                    c = str(item.get("content") or "").strip()
+                    if c:
+                        messages.append({"role": r, "content": c})
                 messages.append({"role": "user", "content": user_text})
 
                 for model_name in models_to_try:
@@ -690,12 +765,26 @@ class JarvisChatbot:
                     except Exception as e:
                         logger.debug(f"Groq API call ({model_name}) note: {e}")
 
-            # 2. Try Gemini
+            # 2. Try Gemini with multi-turn conversation
             if self._gemini_client:
                 try:
+                    from google.genai import types
+                    gem_contents = []
+                    for item in self.history[-16:]:
+                        r = "model" if item.get("role") == "assistant" else "user"
+                        c = str(item.get("content") or "").strip()
+                        if c:
+                            gem_contents.append(types.Content(
+                                role=r,
+                                parts=[types.Part.from_text(text=c)]
+                            ))
+                    gem_contents.append(types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=user_text)]
+                    ))
                     resp = self._gemini_client.models.generate_content(
-                        model="gemini-3.8-flash",
-                        contents=user_text,
+                        model="gemini-2.5-flash",
+                        contents=gem_contents,
                         config={"system_instruction": SYSTEM_PROMPT}
                     )
                     if resp and resp.text:
@@ -703,12 +792,19 @@ class JarvisChatbot:
                 except Exception as ge:
                     logger.debug(f"Gemini call note: {ge}")
 
-            # 3. Try Cohere
+            # 3. Try Cohere with chat history
             if self._cohere_client:
                 try:
+                    chat_hist = []
+                    for item in self.history[-14:]:
+                        r = "CHATBOT" if item.get("role") == "assistant" else "USER"
+                        c = str(item.get("content") or "").strip()
+                        if c:
+                            chat_hist.append({"role": r, "message": c})
                     resp = self._cohere_client.chat(
                         model="command-r-08-2024",
                         message=user_text,
+                        chat_history=chat_hist,
                         preamble=SYSTEM_PROMPT,
                         temperature=0.4
                     )
@@ -795,15 +891,15 @@ class JarvisChatbot:
         # 0. Check for Compound Command ("Turn on plug and open spotify and check weather")
         if self.compound_executor.is_compound_query(user_text):
             comp_res = await self.compound_executor.execute_compound(user_text)
-            self.history.append({"role": "user", "content": user_text})
-            self.history.append({"role": "assistant", "content": comp_res["response"]})
+            self.append_turn("user", user_text)
+            self.append_turn("assistant", comp_res["response"], action="compound")
             return comp_res
 
         # 1. Check for immediate fast intent (Hardware, Apps, System, Files, Weather, Code)
         intent = await self._execute_fast_intent(user_text)
         if intent["action"]:
-            self.history.append({"role": "user", "content": user_text})
-            self.history.append({"role": "assistant", "content": intent["reply"]})
+            self.append_turn("user", user_text)
+            self.append_turn("assistant", intent["reply"], action=intent["action"])
             return {
                 "response": intent["reply"],
                 "action": intent["action"],
@@ -819,8 +915,8 @@ class JarvisChatbot:
         if not ai_reply:
             ai_reply = self._get_local_presentation_response(user_text)
 
-        self.history.append({"role": "user", "content": user_text})
-        self.history.append({"role": "assistant", "content": ai_reply})
+        self.append_turn("user", user_text)
+        self.append_turn("assistant", ai_reply, action=None)
         return {
             "response": ai_reply,
             "action": None,

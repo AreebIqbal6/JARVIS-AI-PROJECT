@@ -147,6 +147,17 @@ async def chat_endpoint(req: ChatRequest):
         logger.warning(f"WebSocket broadcast notice: {be}")
     return res
 
+@app.get("/api/chat/history")
+async def get_chat_history():
+    """Returns persistent conversation history for client HUD restoration."""
+    return {"ok": True, "history": bot.get_history(limit=250)}
+
+@app.delete("/api/chat/history")
+async def clear_chat_history():
+    """Clears persistent chat history from disk and memory."""
+    bot.clear_history()
+    return {"ok": True, "message": "Chat history cleared, Sir."}
+
 @app.post("/api/plug/pair")
 async def pair_endpoint(req: PairRequest):
     """Dynamically pairs with a specified physical plug IP and optional Tapo credentials."""
