@@ -37,6 +37,122 @@ const btnSend = document.getElementById('btnSend');
 const btnVoiceToggle = document.getElementById('btnVoiceToggle');
 const voiceBtnText = document.getElementById('voiceBtnText');
 
+// Center Bulb Hologram & Ambience Matrix Elements
+const bulbStage = document.getElementById('bulbStage');
+const bulbAmbientGlow = document.getElementById('bulbAmbientGlow');
+const bulbInteractiveWrap = document.getElementById('bulbInteractiveWrap');
+const bulbSvg = document.getElementById('bulbSvg');
+const bulbCoreColor = document.getElementById('bulbCoreColor');
+const bulbMidColor = document.getElementById('bulbMidColor');
+const bulbEdgeColor = document.getElementById('bulbEdgeColor');
+const bulbOuterColor = document.getElementById('bulbOuterColor');
+const bulbFilament = document.getElementById('bulbFilament');
+const filamentSpark = document.getElementById('filamentSpark');
+const bulbLumenText = document.getElementById('bulbLumenText');
+const bulbSpectrumText = document.getElementById('bulbSpectrumText');
+const bulbLinkText = document.getElementById('bulbLinkText');
+
+// State for Smart Bulb Matrix (Pure White 100% by default)
+let currentBulbColor = { r: 255, g: 255, b: 255, hex: '#ffffff', name: 'PURE WHITE' };
+let currentBulbBrightness = 100;
+let isBulbPowerOn = true;
+
+// Helper: Convert RGB components to 6-digit Hex code
+function rgbToHex(r, g, b) {
+  const toHex = (n) => {
+    const hex = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  };
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+// Render dynamic brightness and color on the center light bulb graphic
+function updateBulbVisuals() {
+  const factor = isBulbPowerOn ? (currentBulbBrightness / 100) : 0;
+  const hex = currentBulbColor.hex || '#ffffff';
+  const name = currentBulbColor.name || 'PURE WHITE';
+
+  // 1. Center Glass Radial Gradient
+  if (bulbCoreColor) {
+    bulbCoreColor.setAttribute('stop-color', hex);
+    bulbCoreColor.setAttribute('stop-opacity', (0.95 * factor).toFixed(2));
+  }
+  if (bulbMidColor) {
+    bulbMidColor.setAttribute('stop-color', hex);
+    bulbMidColor.setAttribute('stop-opacity', (0.65 * factor).toFixed(2));
+  }
+  if (bulbEdgeColor) {
+    bulbEdgeColor.setAttribute('stop-color', hex);
+    bulbEdgeColor.setAttribute('stop-opacity', (0.25 * factor).toFixed(2));
+  }
+  if (bulbOuterColor) {
+    bulbOuterColor.setAttribute('stop-color', hex);
+    bulbOuterColor.setAttribute('stop-opacity', (0.05 * factor).toFixed(2));
+  }
+
+  // 2. Glowing Filament & Arc Spark
+  if (bulbFilament) {
+    bulbFilament.style.stroke = factor > 0 ? hex : '#37474f';
+    bulbFilament.style.opacity = factor > 0 ? Math.max(0.3, factor).toFixed(2) : '0.15';
+    bulbFilament.style.filter = factor > 0 ? 'url(#filamentGlow)' : 'none';
+  }
+  if (filamentSpark) {
+    filamentSpark.style.fill = factor > 0 ? hex : '#263238';
+    filamentSpark.style.opacity = factor > 0 ? factor.toFixed(2) : '0';
+  }
+
+  // 3. Ambient Glow Backlight
+  if (bulbAmbientGlow) {
+    if (factor > 0) {
+      const { r, g, b } = currentBulbColor;
+      bulbAmbientGlow.style.background = `radial-gradient(circle, rgba(${r}, ${g}, ${b}, ${0.85 * factor}) 0%, rgba(${r}, ${g}, ${b}, ${0.35 * factor}) 40%, transparent 70%)`;
+      bulbAmbientGlow.style.opacity = factor.toFixed(2);
+      bulbAmbientGlow.style.filter = `blur(${Math.round(20 + factor * 22)}px)`;
+    } else {
+      bulbAmbientGlow.style.opacity = '0';
+    }
+  }
+
+  // 4. SVG Drop Shadow Glow
+  if (bulbSvg) {
+    if (factor > 0) {
+      const dropRadius = Math.round(10 + factor * 20);
+      const alpha = (0.5 * factor).toFixed(2);
+      const { r, g, b } = currentBulbColor;
+      bulbSvg.style.filter = `drop-shadow(0 0 ${dropRadius}px rgba(${r}, ${g}, ${b}, ${alpha}))`;
+    } else {
+      bulbSvg.style.filter = 'drop-shadow(0 0 6px rgba(0, 0, 0, 0.4))';
+    }
+  }
+
+  // 5. Telemetry Readout Badge
+  if (bulbLumenText) {
+    bulbLumenText.textContent = isBulbPowerOn ? `${currentBulbBrightness}% INTENSITY` : 'POWER: OFF';
+    bulbLumenText.style.color = factor > 0 ? '#ffffff' : '#798da3';
+  }
+  if (bulbSpectrumText) {
+    bulbSpectrumText.textContent = isBulbPowerOn ? `${name} (${hex.toUpperCase()})` : 'STANDBY MATRIX';
+    bulbSpectrumText.style.color = factor > 0 ? hex : '#798da3';
+  }
+  if (bulbLinkText) {
+    if (isDeviceConnected) {
+      bulbLinkText.textContent = isPowerOn ? '● LIVE HARDWARE LINKED // ONLINE' : '○ HARDWARE STANDBY // RELAY OFF';
+      bulbLinkText.style.color = isPowerOn ? '#3fe08a' : '#f5b041';
+    } else {
+      bulbLinkText.textContent = '○ MATRIX ACTIVE // READY TO PAIR';
+      bulbLinkText.style.color = '#4dd8ff';
+    }
+  }
+
+  // 6. Sync Left-Panel Slider and Label
+  if (sliderBrightness && document.activeElement !== sliderBrightness) {
+    sliderBrightness.value = isBulbPowerOn ? currentBulbBrightness : 0;
+  }
+  if (brightVal) {
+    brightVal.textContent = isBulbPowerOn ? `${currentBulbBrightness}%` : '0%';
+  }
+}
+
 // 1. WebSocket Telemetry & Chat Loop with Serverless/Vercel Fallback
 let wsRetryCount = 0;
 const MAX_WS_RETRIES = 4;
@@ -136,14 +252,14 @@ function updateHardwareUI(data) {
     valAmps.innerHTML = `${a.toFixed(2)} <span class="unit">A</span>`;
   }
 
-  // Brightness
+  // Brightness & Center Bulb Stage Synchronization
   if (data.brightness !== undefined && isDeviceConnected) {
-    sliderBrightness.value = data.brightness;
-    brightVal.textContent = `${data.brightness}%`;
-  } else if (!isDeviceConnected) {
-    sliderBrightness.value = 0;
-    brightVal.textContent = `0%`;
+    currentBulbBrightness = Number(data.brightness);
   }
+  if (isDeviceConnected) {
+    isBulbPowerOn = isPowerOn;
+  }
+  updateBulbVisuals();
 }
 
 // 3. Dynamic Pairing Controls
@@ -227,10 +343,16 @@ btnPowerToggle.addEventListener('click', async () => {
 });
 
 sliderBrightness.addEventListener('input', (e) => {
-  brightVal.textContent = `${e.target.value}%`;
+  currentBulbBrightness = parseInt(e.target.value, 10);
+  isBulbPowerOn = currentBulbBrightness > 0;
+  updateBulbVisuals();
 });
 
 sliderBrightness.addEventListener('change', async (e) => {
+  currentBulbBrightness = parseInt(e.target.value, 10);
+  isBulbPowerOn = currentBulbBrightness > 0;
+  updateBulbVisuals();
+
   if (!isDeviceConnected) return;
   try {
     await fetch('/api/plug/brightness', {
@@ -246,8 +368,20 @@ sliderBrightness.addEventListener('change', async (e) => {
 // Color Presets
 document.querySelectorAll('.color-dot').forEach(btn => {
   btn.addEventListener('click', async () => {
+    const rgbAttr = btn.getAttribute('data-rgb');
+    if (!rgbAttr) return;
+    const [r, g, b] = rgbAttr.split(',').map(Number);
+    const colorName = btn.getAttribute('data-name') || btn.getAttribute('title') || 'CUSTOM';
+    currentBulbColor = { r, g, b, hex: rgbToHex(r, g, b), name: colorName };
+    isBulbPowerOn = true;
+
+    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active-dot'));
+    btn.classList.add('active-dot');
+
+    updateBulbVisuals();
+
     if (!isDeviceConnected) return;
-    const [r, g, b] = btn.getAttribute('data-rgb').split(',').map(Number);
+
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
     let h = 0, s = max === 0 ? 0 : (max - min) / max * 100, v = max / 255 * 100;
     if (max !== min) {
@@ -263,12 +397,35 @@ document.querySelectorAll('.color-dot').forEach(btn => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hue: Math.round(h), saturation: Math.round(s), value: Math.round(v) })
       });
-      appendChatMessage('assistant', `Smart bulb ambience shifted to selected color palette, Sir.`);
+      appendChatMessage('assistant', `Smart bulb ambience shifted to ${colorName}, Sir.`);
     } catch (e) {
       console.error(e);
     }
   });
 });
+
+// Interactive Center Bulb Click-to-Toggle
+if (bulbInteractiveWrap) {
+  bulbInteractiveWrap.addEventListener('click', async () => {
+    isBulbPowerOn = !isBulbPowerOn;
+    updateBulbVisuals();
+
+    if (isDeviceConnected) {
+      try {
+        const res = await fetch('/api/plug/toggle', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok && data.data) {
+          isPowerOn = data.data.state === 'on';
+          btnPowerToggle.classList.toggle('active', isPowerOn);
+          powerStateText.textContent = isPowerOn ? 'ON' : 'OFF';
+          powerStateText.classList.toggle('on', isPowerOn);
+        }
+      } catch (e) {
+        console.error('Error toggling bulb via click:', e);
+      }
+    }
+  });
+}
 
 // 5. Wi-Fi Subnet Discovery with 1-Click Pairing
 btnScanNet.addEventListener('click', async () => {
@@ -1222,4 +1379,5 @@ window.addEventListener('DOMContentLoaded', () => {
   initSplashTransitions();
   updateLanguageDisplay();
   setHardwarePanelState(true, false);
+  updateBulbVisuals();
 });

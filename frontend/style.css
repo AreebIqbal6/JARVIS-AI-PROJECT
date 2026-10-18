@@ -63,14 +63,15 @@ body {
   max-width: 100vw;
   height: 100vh;
   max-height: 100vh;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   overflow: hidden;
   position: relative;
   z-index: 10;
   pointer-events: auto;
-  padding: 8px;
+  padding: 6px 10px 8px 10px;
 }
 
 /* Header */
@@ -204,11 +205,11 @@ body {
   justify-content: space-between;
   align-items: stretch;
   width: 100%;
-  gap: 30px;
+  gap: 16px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  padding: 0 6px;
+  padding: 0 4px;
   position: relative;
 }
 
@@ -380,9 +381,8 @@ body {
 
 /* Hardware Card Elements - Pinned to Left, Transparent & Borderless (Matching Chat Deck) */
 .hardware-card {
-  width: min(530px, 40vw);
+  width: min(500px, 36vw);
   flex-shrink: 0;
-  margin-right: auto;
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -803,8 +803,6 @@ body {
   flex-direction: column;
   width: min(440px, 32vw);
   flex-shrink: 0;
-  margin-left: auto;
-  /* Pushes chat box to the far right */
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -1466,4 +1464,217 @@ body {
     opacity: 1;
     box-shadow: 0 0 26px rgba(0, 229, 255, 0.4), inset 0 0 14px rgba(0, 229, 255, 0.2);
   }
+}
+
+/* ================================================================
+   CENTER STAGE: High-Tech Animated Smart Bulb Matrix
+   ================================================================ */
+.center-bulb-stage {
+  flex: 1;
+  min-width: 240px;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: visible;
+  z-index: 15;
+  pointer-events: auto;
+}
+
+.stage-lens-flare {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, rgba(77, 216, 255, 0.05) 45%, transparent 70%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.stage-radiation-ring {
+  position: absolute;
+  top: 36%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  z-index: 2;
+  transition: all 0.5s ease;
+}
+
+.ring-outer {
+  width: 310px;
+  height: 310px;
+  animation: rotateRing 32s linear infinite;
+}
+
+.ring-mid {
+  width: 240px;
+  height: 240px;
+  border-style: dotted;
+  border-color: rgba(77, 216, 255, 0.2);
+  animation: rotateRingRev 24s linear infinite;
+}
+
+.ring-inner {
+  width: 180px;
+  height: 180px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@keyframes rotateRing {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes rotateRingRev {
+  from { transform: translate(-50%, -50%) rotate(360deg); }
+  to { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+.bulb-ambient-glow {
+  position: absolute;
+  top: 36%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.35) 40%, transparent 70%);
+  filter: blur(36px);
+  pointer-events: none;
+  z-index: 3;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.95;
+}
+
+.bulb-interactive-container {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.25s ease;
+  user-select: none;
+}
+
+.bulb-interactive-container:hover {
+  transform: scale(1.03);
+}
+
+.bulb-interactive-container:active {
+  transform: scale(0.97);
+}
+
+.bulb-svg {
+  width: 180px;
+  height: 252px;
+  filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.6));
+  transition: filter 0.35s ease;
+  overflow: visible;
+}
+
+.bulb-halo {
+  transition: opacity 0.35s ease;
+}
+
+.bulb-glass-shell {
+  transition: stroke 0.35s ease, opacity 0.35s ease;
+}
+
+.bulb-filament {
+  transition: stroke 0.35s ease, filter 0.35s ease, opacity 0.35s ease;
+  animation: filamentFlicker 4s infinite alternate ease-in-out;
+}
+
+.filament-spark {
+  transition: fill 0.35s ease, opacity 0.35s ease;
+  animation: sparkPulse 1.8s infinite alternate ease-in-out;
+}
+
+@keyframes filamentFlicker {
+  0% { opacity: 0.95; }
+  49% { opacity: 0.95; }
+  50% { opacity: 0.85; }
+  52% { opacity: 0.98; }
+  85% { opacity: 0.95; }
+  86% { opacity: 0.90; }
+  88% { opacity: 1; }
+  100% { opacity: 0.95; }
+}
+
+@keyframes sparkPulse {
+  0% { transform: scale(0.9); opacity: 0.75; }
+  100% { transform: scale(1.2); opacity: 1; }
+}
+
+.bulb-telemetry-badge {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: rgba(3, 14, 26, 0.75);
+  border: 1px solid rgba(77, 216, 255, 0.25);
+  border-radius: 8px;
+  padding: 6px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.badge-title {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.badge-metric-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.badge-lumens {
+  color: #fff;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+}
+
+.badge-divider {
+  color: var(--cyan);
+  opacity: 0.4;
+}
+
+.badge-color-name {
+  color: var(--cyan);
+  text-shadow: 0 0 6px var(--cyan-glow);
+}
+
+.badge-status-sub {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  color: #3fe08a;
+  opacity: 0.9;
+}
+
+.color-dot.active-dot {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  transform: scale(1.15);
 }

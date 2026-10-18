@@ -75,15 +75,16 @@
           <div class="bulb-block">
             <div class="section-title">SMART BULB AMBIENCE</div>
             <div class="slider-row">
-              <span>LEVEL: <b id="brightVal">0%</b></span>
-              <input type="range" id="sliderBrightness" min="1" max="100" value="0" />
+              <span>LEVEL: <b id="brightVal">100%</b></span>
+              <input type="range" id="sliderBrightness" min="1" max="100" value="100" />
             </div>
             <div class="color-presets">
-              <button class="color-dot" style="background:#ffddaa;" data-rgb="255,220,170" title="Warm White"></button>
-              <button class="color-dot" style="background:#4dd8ff;" data-rgb="77,216,255" title="Cyan / Stark Blue"></button>
-              <button class="color-dot" style="background:#ff3344;" data-rgb="255,50,70" title="Emergency Red"></button>
-              <button class="color-dot" style="background:#3fe08a;" data-rgb="63,224,138" title="Emerald Green"></button>
-              <button class="color-dot" style="background:#cc66ff;" data-rgb="204,102,255" title="Neon Purple"></button>
+              <button class="color-dot active-dot" style="background:#ffffff; box-shadow: 0 0 10px #ffffff;" data-rgb="255,255,255" data-name="PURE WHITE" title="Pure White (Default)"></button>
+              <button class="color-dot" style="background:#ffddaa;" data-rgb="255,220,170" data-name="WARM WHITE" title="Warm White"></button>
+              <button class="color-dot" style="background:#4dd8ff;" data-rgb="77,216,255" data-name="CYAN" title="Cyan / Stark Blue"></button>
+              <button class="color-dot" style="background:#ff3344;" data-rgb="255,50,70" data-name="EMERGENCY RED" title="Emergency Red"></button>
+              <button class="color-dot" style="background:#3fe08a;" data-rgb="63,224,138" data-name="EMERALD GREEN" title="Emerald Green"></button>
+              <button class="color-dot" style="background:#cc66ff;" data-rgb="204,102,255" data-name="NEON PURPLE" title="Neon Purple"></button>
             </div>
           </div>
         </div>
@@ -129,6 +130,113 @@
           <div class="section-title" style="margin-top: 10px;">LOCAL WI-FI SUBNET DISCOVERY</div>
           <div class="devices-list" id="devicesList">
             <div class="device-empty">Click '⟳ SCAN WI-FI' to automatically locate all TP-Link devices on your network.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CENTER COLUMN: Interactive Smart Bulb Hologram & Ambience Stage -->
+      <section class="center-bulb-stage" id="bulbStage">
+        <div class="stage-lens-flare"></div>
+        <div class="stage-radiation-ring ring-outer"></div>
+        <div class="stage-radiation-ring ring-mid"></div>
+        <div class="stage-radiation-ring ring-inner"></div>
+
+        <div class="bulb-ambient-glow" id="bulbAmbientGlow"></div>
+
+        <div class="bulb-interactive-container" id="bulbInteractiveWrap" title="Click to Toggle Light Bulb Power">
+          <svg class="bulb-svg" id="bulbSvg" viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <!-- Dynamic radial glow for bulb glass core -->
+              <radialGradient id="bulbGlassGrad" cx="50%" cy="40%" r="55%" fx="45%" fy="32%">
+                <stop offset="0%" id="bulbCoreColor" stop-color="#ffffff" stop-opacity="0.95" />
+                <stop offset="45%" id="bulbMidColor" stop-color="#ffffff" stop-opacity="0.65" />
+                <stop offset="78%" id="bulbEdgeColor" stop-color="#ffffff" stop-opacity="0.25" />
+                <stop offset="100%" id="bulbOuterColor" stop-color="#ffffff" stop-opacity="0.05" />
+              </radialGradient>
+
+              <!-- Filament glow filter -->
+              <filter id="filamentGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="3" result="blur1" />
+                <feGaussianBlur stdDeviation="8" result="blur2" />
+                <feMerge>
+                  <feMergeNode in="blur2" />
+                  <feMergeNode in="blur1" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+
+              <!-- Glass rim highlight linear gradient -->
+              <linearGradient id="glassRimGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6" />
+                <stop offset="30%" stop-color="#ffffff" stop-opacity="0.1" />
+                <stop offset="70%" stop-color="#ffffff" stop-opacity="0.05" />
+                <stop offset="100%" stop-color="#ffffff" stop-opacity="0.4" />
+              </linearGradient>
+
+              <!-- Metallic Screw Base Gradient -->
+              <linearGradient id="metalBaseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#2c3a47" />
+                <stop offset="25%" stop-color="#7f8c8d" />
+                <stop offset="50%" stop-color="#bdc3c7" />
+                <stop offset="75%" stop-color="#7f8c8d" />
+                <stop offset="100%" stop-color="#1e272e" />
+              </linearGradient>
+
+              <!-- Base Contact Point Gradient -->
+              <linearGradient id="contactPointGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#111" />
+                <stop offset="50%" stop-color="#333" />
+                <stop offset="100%" stop-color="#050505" />
+              </linearGradient>
+            </defs>
+
+            <!-- Bulb Silhouette / Glow Halo -->
+            <path class="bulb-halo" id="bulbHalo" d="M100,12 C52,12 24,50 24,96 C24,130 52,160 66,188 L134,188 C148,160 176,130 176,96 C176,50 148,12 100,12 Z" fill="url(#bulbGlassGrad)" />
+
+            <!-- Outer Glass Bulb Shell Outline -->
+            <path class="bulb-glass-shell" d="M100,12 C52,12 24,50 24,96 C24,130 52,160 66,188 L134,188 C148,160 176,130 176,96 C176,50 148,12 100,12 Z" fill="none" stroke="url(#glassRimGrad)" stroke-width="2.5" />
+
+            <!-- Glass Reflection Highlight Curve -->
+            <path class="bulb-specular" d="M42,55 C46,36 62,24 82,20" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.65" />
+            <circle cx="94" cy="20" r="1.5" fill="#ffffff" opacity="0.5" />
+
+            <!-- Support Wires (Stem) inside bulb -->
+            <path d="M88,188 L88,136 L78,110" fill="none" stroke="#607d8b" stroke-width="1.8" opacity="0.75" />
+            <path d="M112,188 L112,136 L122,110" fill="none" stroke="#607d8b" stroke-width="1.8" opacity="0.75" />
+            <line x1="88" y1="148" x2="112" y2="148" stroke="#455a64" stroke-width="1.5" opacity="0.6" />
+
+            <!-- Core Glowing Filament (W-Shape or Double Loop) -->
+            <path class="bulb-filament" id="bulbFilament" d="M78,110 Q88,85 100,105 Q112,85 122,110" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#filamentGlow)" />
+            
+            <!-- Incandescent Micro Arc / Center Spark -->
+            <circle class="filament-spark" id="filamentSpark" cx="100" cy="100" r="4.5" fill="#ffffff" filter="url(#filamentGlow)" />
+
+            <!-- Metallic Screw Base Threads -->
+            <!-- Thread 1 -->
+            <path d="M66,188 C66,188 62,196 68,199 L132,199 C138,196 134,188 134,188 Z" fill="url(#metalBaseGrad)" stroke="#1a252f" stroke-width="1" />
+            <!-- Thread 2 -->
+            <path d="M67,199 C63,203 64,210 70,213 L130,213 C136,210 137,203 133,199 Z" fill="url(#metalBaseGrad)" stroke="#1a252f" stroke-width="1" />
+            <!-- Thread 3 -->
+            <path d="M70,213 C67,218 68,225 74,228 L126,228 C132,225 133,218 130,213 Z" fill="url(#metalBaseGrad)" stroke="#1a252f" stroke-width="1" />
+            <!-- Thread 4 (Bottom neck) -->
+            <path d="M74,228 C72,233 74,239 80,242 L120,242 C126,239 128,233 126,228 Z" fill="url(#metalBaseGrad)" stroke="#1a252f" stroke-width="1" />
+
+            <!-- Black Ceramic Insulator Ring -->
+            <path d="M80,242 L120,242 L114,248 L86,248 Z" fill="#0d1117" />
+
+            <!-- Bottom Contact Foot -->
+            <path d="M86,248 C88,255 112,255 114,248 Z" fill="url(#contactPointGrad)" stroke="#333" stroke-width="0.8" />
+          </svg>
+
+          <!-- Floating Telemetry HUD Readout directly underneath bulb -->
+          <div class="bulb-telemetry-badge">
+            <div class="badge-title">PHOTON EMISSION SPECTRUM</div>
+            <div class="badge-metric-row">
+              <span class="badge-lumens" id="bulbLumenText">100% INTENSITY</span>
+              <span class="badge-divider">|</span>
+              <span class="badge-color-name" id="bulbSpectrumText">PURE WHITE (#FFFFFF)</span>
+            </div>
+            <div class="badge-status-sub" id="bulbLinkText">SYNCED TO SMART BULB RELAY</div>
           </div>
         </div>
       </section>
