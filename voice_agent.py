@@ -15,6 +15,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("VoiceAgent")
 load_dotenv()
 
+def contains_urdu(text: str) -> bool:
+    import re
+    return bool(re.search(r'[\u0600-\u06FF]', text))
+
 class VoiceControlEngine:
     def __init__(self, chatbot, sample_rate: int = 16000, chunk_duration_sec: int = 3):
         self.chatbot = chatbot
@@ -23,10 +27,12 @@ class VoiceControlEngine:
         self.is_listening = False
         self._whisper_model = None
         self._tts_engine = None
+        self.assistant_voice = os.getenv("AssistantVoice") or os.getenv("ASSISTANT_VOICE") or "en-GB-RyanNeural"
+        self.urdu_voice = os.getenv("URDU_VOICE") or "ur-PK-AsadNeural"
         self._init_audio_models()
 
     def _init_audio_models(self):
-        """Initializes Whisper STT and TTS engine."""
+        """Initializes Whisper STT and Pygame audio mixer."""
         # 1. Faster-Whisper local model
         try:
             from faster_whisper import WhisperModel
@@ -36,26 +42,84 @@ class VoiceControlEngine:
         except Exception as e:
             logger.info(f"Local faster-whisper not available ({e}). Will use Groq Whisper or cloud fallback.")
 
-        # 2. Offline TTS engine (pyttsx3)
+        # 2. Pygame mixer for audio output
         try:
-            import pyttsx3
-            self._tts_engine = pyttsx3.init()
-            self._tts_engine.setProperty("rate", 185)  # Crisper British cadence
-            voices = self._tts_engine.getProperty("voices")
-            for voice in voices:
-                if "david" in voice.name.lower() or "george" in voice.name.lower() or "english" in voice.name.lower():
-                    self._tts_engine.setProperty("voice", voice.id)
-                    break
+            import pygame
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+                logger.info("Pygame mixer armed for neural audio.")
         except Exception as e:
-            logger.info(f"pyttsx3 TTS offline ({e}).")
+            logger.debug(f"Pygame mixer init note: {e}")
+
+    async def generate_speech_mp3(self, text: str) -> Optional[bytes]:
+        """Synthesizes high-fidelity Edge-TTS MP3 (en-GB-RyanNeural / ur-PK-AsadNeural)."""
+        import re
+        import edge_tts
+        clean_text = text.replace("◈", "").replace("*", "").replace("#", "").strip()
+        spoken_text = re.sub(r'J\.A\.R\.V\.I\.S\.?', 'Jarvis', clean_text, flags=re.IGNORECASE)
+        if not spoken_text:
+            return None
+
+        is_urdu = contains_urdu(spoken_text)
+        voice = self.urdu_voice if is_urdu else self.assistant_voice
+        try:
+            comm = edge_tts.Communicate(spoken_text, voice)
+            mp3_bytes = bytearray()
+            async for chunk in comm.stream():
+                if chunk["type"] == "audio":
+                    mp3_bytes.extend(chunk["data"])
+            return bytes(mp3_bytes)
+        except Exception as e:
+            logger.warning(f"Edge-TTS synthesis error ({voice}): {e}")
+            return None
 
     def speak(self, text: str):
-        """Speaks out loud to the operator via native Windows audio."""
+        """Speaks out loud to the operator via en-GB-RyanNeural or ur-PK-AsadNeural."""
         import re
         import subprocess
-        clean_text = text.replace("◈", "").replace("*", "").strip()
+        clean_text = text.replace("◈", "").replace("*", "").replace("#", "").strip()
         spoken_text = re.sub(r'J\.A\.R\.V\.I\.S\.?', 'Jarvis', clean_text, flags=re.IGNORECASE)
+        if not spoken_text:
+            return
         print(f"\n>> [J.A.R.V.I.S.]: {clean_text}")
+
+        # 1. Edge-TTS neural voice via Pygame
+        try:
+            import edge_tts
+            import pygame
+            import asyncio
+            import tempfile
+
+            is_urdu = contains_urdu(spoken_text)
+            voice = self.urdu_voice if is_urdu else self.assistant_voice
+
+            async def _synth():
+                comm = edge_tts.Communicate(spoken_text, voice)
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+                    p = tf.name
+                await comm.save(p)
+                return p
+
+            temp_path = asyncio.run(_synth())
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    if not pygame.mixer.get_init():
+                        pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+                    pygame.mixer.music.load(temp_path)
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        pygame.time.Clock().tick(20)
+                    pygame.mixer.music.unload()
+                finally:
+                    try:
+                        os.remove(temp_path)
+                    except:
+                        pass
+                return
+        except Exception as e:
+            logger.warning(f"Neural TTS playback failed, falling back to local SAPI: {e}")
+
+        # 2. Local Windows SAPI fallback
         try:
             ps_text = spoken_text.replace('"', '`"').replace("'", "''")
             subprocess.Popen([
@@ -63,7 +127,7 @@ class VoiceControlEngine:
                 f"$v = New-Object -ComObject SAPI.SpVoice; $v.Rate = 1; $v.Speak('{ps_text}')"
             ])
         except Exception as e:
-            logger.debug(f"TTS audio playback note: {e}")
+            logger.debug(f"Offline SAPI fallback note: {e}")
 
     def record_audio_chunk(self) -> Optional[np.ndarray]:
         """Synchronously records audio from microphone directly into RAM (Thread worker)."""

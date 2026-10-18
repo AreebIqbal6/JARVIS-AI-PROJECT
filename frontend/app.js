@@ -480,6 +480,8 @@ function fallbackToBackendTTS(text) {
   } catch (e) {}
 }
 
+let currentNeuralAudio = null;
+
 function speakResponse(text, force = true) {
   if (!text) return;
   const now = Date.now();
@@ -493,63 +495,64 @@ function speakResponse(text, force = true) {
   cleanText = cleanText.replace(/J\.A\.R\.V\.I\.S\.?/gi, 'Jarvis');
   if (!cleanText) return;
 
-  // 1. Browser SpeechSynthesis Engine
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  // Stop any previous speech playback
+  if (currentNeuralAudio) {
     try {
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.resume();
-
-      if (!browserVoices || browserVoices.length === 0) {
-        browserVoices = window.speechSynthesis.getVoices();
-      }
-
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      const preferred = browserVoices.find(v => 
-        (v.lang && (v.lang.includes('en-GB') || v.lang.includes('en-US'))) && 
-        (v.name.includes('David') || v.name.includes('George') || v.name.includes('Daniel') || v.name.includes('Oliver') || v.name.includes('Ryan') || v.name.includes('Natural') || v.name.includes('Google UK English Male'))
-      ) || browserVoices.find(v => v.lang && v.lang.startsWith('en')) || browserVoices[0];
-
-      if (preferred) utterance.voice = preferred;
-      utterance.rate = 1.05;
-      utterance.pitch = 0.95;
-
-      utterance.onstart = () => {
-        setSpeakingVisualState(true);
-      };
-
-      const handleSpeechFinish = () => {
-        setSpeakingVisualState(false);
-        const splash = document.getElementById('splashScreen');
-        const splashStatus = document.getElementById('splashStatusText');
-        if (isVoiceListening) {
-          if (splash) splash.classList.add('listening');
-          if (splashStatus) splashStatus.textContent = 'LISTENING... // SPEAK NOW';
-          if (browserRecognizer && !isRecognizing) {
-            try { browserRecognizer.start(); } catch (e) {}
-          }
-        } else {
-          if (splash) splash.classList.remove('listening');
-          if (splashStatus) splashStatus.textContent = 'NEURAL CORE ONLINE';
-        }
-      };
-
-      utterance.onend = handleSpeechFinish;
-      utterance.onerror = (err) => {
-        console.warn('Browser SpeechSynthesis blocked/errored, falling back to local host audio:', err);
-        handleSpeechFinish();
-        fallbackToBackendTTS(cleanText);
-      };
-
-      window.speechSynthesis.speak(utterance);
-      return;
-    } catch (e) {
-      console.warn('SpeechSynthesis error:', e);
-      setSpeakingVisualState(false);
-    }
+      currentNeuralAudio.pause();
+      currentNeuralAudio.currentTime = 0;
+    } catch (e) {}
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
   }
 
-  // 2. Fallback to Local Host Hardware Speaker (Python pyttsx3)
-  fallbackToBackendTTS(cleanText);
+  setSpeakingVisualState(true);
+
+  const handleSpeechFinish = () => {
+    setSpeakingVisualState(false);
+    const splash = document.getElementById('splashScreen');
+    const splashStatus = document.getElementById('splashStatusText');
+    if (isVoiceListening) {
+      if (splash) splash.classList.add('listening');
+      if (splashStatus) splashStatus.textContent = 'LISTENING... // SPEAK NOW';
+      if (browserRecognizer && !isRecognizing) {
+        try { browserRecognizer.start(); } catch (e) {}
+      }
+    } else {
+      if (splash) splash.classList.remove('listening');
+      if (splashStatus) splashStatus.textContent = 'NEURAL CORE ONLINE';
+    }
+  };
+
+  // 1. Primary: Stream studio-grade Neural Audio (en-GB-RyanNeural / ur-PK-AsadNeural)
+  try {
+    const audioUrl = `/api/voice/audio?text=${encodeURIComponent(cleanText)}`;
+    const audio = new Audio(audioUrl);
+    currentNeuralAudio = audio;
+
+    audio.onplay = () => {
+      setSpeakingVisualState(true);
+    };
+
+    audio.onended = () => {
+      handleSpeechFinish();
+    };
+
+    audio.onerror = (e) => {
+      console.warn('Browser neural audio stream error, falling back to host speakers:', e);
+      fallbackToBackendTTS(cleanText);
+      setTimeout(handleSpeechFinish, 2000);
+    };
+
+    audio.play().catch(err => {
+      console.info('Browser autoplay restricted, executing host speaker playback via Pygame:', err);
+      fallbackToBackendTTS(cleanText);
+      setTimeout(handleSpeechFinish, 2500);
+    });
+  } catch (err) {
+    fallbackToBackendTTS(cleanText);
+    setTimeout(handleSpeechFinish, 2000);
+  }
 }
 
 // Immediate Stop Interrupt Controller (English, Roman Urdu, Urdu Script, and ASR phonetic mishearings)

@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -206,6 +206,17 @@ async def stop_voice():
         voice_task.cancel()
         voice_task = None
     return {"ok": True, "status": "Voice loop stopped"}
+
+@app.get("/api/voice/audio")
+async def get_voice_audio(text: str = ""):
+    """Streams synthesized MP3 audio (en-GB-RyanNeural or ur-PK-AsadNeural) directly to the HUD."""
+    clean = (text or "").replace("◈", "").replace("*", "").replace("#", "").strip()
+    if not clean:
+        raise HTTPException(status_code=400, detail="Empty text")
+    mp3_bytes = await voice.generate_speech_mp3(clean)
+    if not mp3_bytes:
+        raise HTTPException(status_code=500, detail="Neural audio synthesis failed")
+    return Response(content=mp3_bytes, media_type="audio/mpeg")
 
 @app.post("/api/voice/speak")
 async def speak_voice_endpoint(req: SpeakRequest):

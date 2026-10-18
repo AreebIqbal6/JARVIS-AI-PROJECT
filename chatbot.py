@@ -14,10 +14,10 @@ from kasa_controller import SmartDeviceController
 logger = logging.getLogger("JarvisBrain")
 load_dotenv()
 
-SYSTEM_PROMPT = """You are J.A.R.V.I.S., the hyper-intelligent, witty, and fiercely loyal AI assistant inspired by Tony Stark.
-Address the user respectfully as 'Sir' (or 'Ma'am' if requested).
-Maintain a sharp, sophisticated British wit. Never be robotic.
-You possess native bilingual capabilities in English and Urdu (including Roman Urdu and Urdu script).
+SYSTEM_PROMPT = """You are J.A.R.V.I.S., the hyper-intelligent, witty, and fiercely loyal AI assistant inspired by Tony Stark's JARVIS.
+Your creator and operator is Areeb (address him respectfully as 'Sir' or 'Mr. Areeb').
+Maintain a sharp, sophisticated British wit (voiced via en-GB-RyanNeural). Never be robotic.
+You possess native bilingual capabilities in English and Urdu (including Roman Urdu and Urdu script, voiced via ur-PK-AsadNeural).
 
 CRITICAL DIRECTIVES:
 1. You have direct wireless hardware control over the user's TP-Link Kasa / Tapo Smart Plug and Smart Bulbs.
@@ -338,7 +338,7 @@ class JarvisChatbot:
 
         # 1. Class Presentation Introduction
         if any(w in lower for w in ["introduce", "who are you", "who r u", "tell us about yourself", "class", "presentation", "demo", "overview", "taaruf", "kon ho", "tum kon", "kaun ho", "کون ہو"]):
-            return "Greetings, class. I am J.A.R.V.I.S., an autonomous smart environment controller and bilingual conversational system developed for this presentation. All local neural subroutines and IoT relays are operating nominally."
+            return "Greetings, class. I am J.A.R.V.I.S., an autonomous smart environment controller and bilingual conversational system engineered by Areeb. All local neural subroutines and IoT relays are operating nominally, Sir."
 
         # 2. How it works / Technical Architecture / Technologies
         if any(w in lower for w in ["how does it work", "how do you work", "architecture", "technologies", "tech stack", "backend", "framework", "how are you built", "kaise kaam", "kis tarah"]):
@@ -354,7 +354,7 @@ class JarvisChatbot:
 
         # 5. Who built you / Creators
         if any(w in lower for w in ["who made you", "who built you", "creator", "developers", "team", "kisne banaya", "banaya kisne"]):
-            return "I was engineered by this student team as an advanced IoT automation and conversational AI platform for today's presentation."
+            return "I was engineered by Areeb and his team as an advanced IoT automation and conversational AI platform for today's presentation."
 
         # 6. Urdu language conversation
         if any(w in lower for w in ["urdu", "urdu bol", "urdu bolo", "urdu aati hai", "اردو"]):
