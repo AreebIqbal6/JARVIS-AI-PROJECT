@@ -60,7 +60,7 @@ function initWebSocket() {
           updateHardwareUI(msg.data);
         } else if (msg.type === 'chat_message') {
           appendChatMessage('assistant', msg.reply);
-          speakResponse(msg.reply);
+          speakResponse(msg.reply, isVoiceListening);
         }
       } catch (e) {
         console.error('[WS Parse Error]:', e);
@@ -308,7 +308,20 @@ btnScanNet.addEventListener('click', async () => {
 });
 
 // 6. Chat System
+let lastRenderedAssistant = '';
+let lastRenderedTime = 0;
+
 function appendChatMessage(role, text) {
+  if (!text) return;
+  const now = Date.now();
+  if (role === 'assistant') {
+    if (text === lastRenderedAssistant && (now - lastRenderedTime < 3500)) {
+      return; // Ignore duplicate assistant response within 3.5 seconds
+    }
+    lastRenderedAssistant = text;
+    lastRenderedTime = now;
+  }
+
   const msgDiv = document.createElement('div');
   msgDiv.className = `chat-msg ${role}`;
   msgDiv.innerHTML = `
@@ -320,11 +333,38 @@ function appendChatMessage(role, text) {
 }
 
 // Speech Synthesis (Audio Output)
-function speakResponse(text) {
-  if (!isVoiceListening || !window.speechSynthesis) return;
+let lastSpokenText = '';
+let lastSpokenTime = 0;
+
+function setSpeakingVisualState(active) {
+  const splash = document.getElementById('splashScreen');
+  const splashStatus = document.getElementById('splashStatusText');
+  if (splash) {
+    splash.classList.toggle('speaking', active);
+  }
+  if (splashStatus) {
+    splashStatus.textContent = active ? 'TRANSMITTING // VOICE CADENCE' : 'NEURAL CORE ONLINE';
+  }
+  if (neuralVisualizer) {
+    neuralVisualizer.setSpeaking(active);
+  }
+}
+
+let isRecognizing = false;
+
+function speakResponse(text, force = false) {
+  if ((!isVoiceListening && !force) || !window.speechSynthesis) return;
+  const now = Date.now();
+  if (text === lastSpokenText && (now - lastSpokenTime < 3500)) {
+    return; // Don't speak identical text twice within 3.5 seconds
+  }
+  lastSpokenText = text;
+  lastSpokenTime = now;
   try {
     window.speechSynthesis.cancel();
-    const cleanText = text.replace(/[*#◈_`]/g, '').trim();
+    let cleanText = text.replace(/[*#◈_`]/g, '').trim();
+    // Pronounce as "Jarvis" in audio while retaining "J.A.R.V.I.S." in written chat
+    cleanText = cleanText.replace(/J\.A\.R\.V\.I\.S\.?/gi, 'Jarvis');
     if (!cleanText) return;
     const utterance = new SpeechSynthesisUtterance(cleanText);
     const voices = window.speechSynthesis.getVoices();
@@ -335,10 +375,104 @@ function speakResponse(text) {
     if (preferred) utterance.voice = preferred;
     utterance.rate = 1.05;
     utterance.pitch = 0.95;
+
+    // Pulse and dissolve rings into 3D neural web while J.A.R.V.I.S. speaks
+    utterance.onstart = () => {
+      // Keep microphone active so user can say "Stop" at any moment to interrupt!
+      const splash = document.getElementById('splashScreen');
+      if (splash) splash.classList.remove('listening');
+      setSpeakingVisualState(true);
+    };
+
+    const handleSpeechFinish = () => {
+      setSpeakingVisualState(false);
+      const splash = document.getElementById('splashScreen');
+      const splashStatus = document.getElementById('splashStatusText');
+      if (isVoiceListening) {
+        if (splash) splash.classList.add('listening');
+        if (splashStatus) splashStatus.textContent = 'LISTENING... // SPEAK NOW';
+        if (browserRecognizer && !isRecognizing) {
+          try { browserRecognizer.start(); } catch (e) {}
+        }
+      } else {
+        if (splash) splash.classList.remove('listening');
+        if (splashStatus) splashStatus.textContent = 'NEURAL CORE ONLINE';
+      }
+    };
+
+    utterance.onend = handleSpeechFinish;
+    utterance.onerror = handleSpeechFinish;
+
     window.speechSynthesis.speak(utterance);
   } catch (e) {
     console.debug('TTS note:', e);
+    setSpeakingVisualState(false);
   }
+}
+
+// Immediate Stop Interrupt Controller (English, Roman Urdu, Urdu Script, and ASR phonetic mishearings)
+function isStopCommand(text) {
+  if (!text) return false;
+  const clean = text.toLowerCase().trim();
+  const enMatch = /\b(stop|quiet|shut\s*up|silence|ruko|chup|ruk\s*jao|bas\s*karo|band\s*karo|khamosh|rocco|record)\b/i.test(clean);
+  const urMatch = /[\u0600-\u06FF]/.test(clean) && /(روکو|چپ|رک\s*جاؤ|بس\s*کرو|بند\s*کرو|خاموش)/.test(clean);
+  return enMatch || urMatch;
+}
+
+// Voice OFF Voice Command Detector ("voice off", "go to sleep", "awaz band karo", "so jao")
+function isVoiceOffCommand(text) {
+  if (!text) return false;
+  const clean = text.toLowerCase().trim();
+  const enMatch = /\b(voice\s*off|turn\s*off\s*voice|stop\s*listening|go\s*to\s*sleep|sleep\s*mode|disable\s*voice|standby\s*voice|voice\s*standby|sleep)\b/i.test(clean);
+  const urMatch = /\b(awaz\s*band(?:\s*karo)?|so\s*jao|sunna\s*band(?:\s*karo)?|mic\s*band(?:\s*karo)?|khamosh\s*ho\s*jao)\b/i.test(clean) ||
+                  (/[\u0600-\u06FF]/.test(clean) && /(آواز\s*بند|سو\s*جاؤ|سننا\s*بند|مائیک\s*بند|خاموش|بند\s*ہو\s*جاؤ)/.test(clean));
+  return enMatch || urMatch;
+}
+
+function stopSpeakingImmediately() {
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  setSpeakingVisualState(false);
+  const splash = document.getElementById('splashScreen');
+  const splashStatus = document.getElementById('splashStatusText');
+  if (isVoiceListening) {
+    if (splash) splash.classList.add('listening');
+    if (splashStatus) splashStatus.textContent = 'SPEECH HALTED // LISTENING';
+  }
+}
+
+// Active Speech Language (Defaulting to ur-PK which handles both Urdu and code-switched English)
+let currentSpeechLang = localStorage.getItem('jarvis_speech_lang') || 'ur-PK';
+
+function setSpeechLanguage(lang, announce = false) {
+  currentSpeechLang = lang;
+  localStorage.setItem('jarvis_speech_lang', lang);
+  if (browserRecognizer) {
+    const wasListening = isRecognizing;
+    try { browserRecognizer.abort(); } catch (e) {}
+    browserRecognizer.lang = lang;
+    if (wasListening) {
+      setTimeout(() => {
+        try { browserRecognizer.start(); } catch (e) {}
+      }, 250);
+    }
+  }
+  updateLanguageDisplay();
+  if (announce) {
+    const label = lang === 'ur-PK' ? 'Urdu & bilingual' : 'English (US)';
+    const reply = `Speech recognition language switched to ${label} mode, Sir.`;
+    appendChatMessage('assistant', reply);
+    speakResponse(reply, true);
+  }
+}
+
+function updateLanguageDisplay() {
+  const langText = document.getElementById('langBtnText');
+  const splashLangBtn = document.getElementById('splashLangBtn');
+  const label = currentSpeechLang === 'ur-PK' ? 'LANG: URDU (PK)' : 'LANG: EN (US)';
+  if (langText) langText.textContent = label;
+  if (splashLangBtn) splashLangBtn.textContent = currentSpeechLang === 'ur-PK' ? '🌐 URDU' : '🌐 EN-US';
 }
 
 // Ensure voices are loaded in Chromium browsers
@@ -348,23 +482,72 @@ if (window.speechSynthesis) {
   };
 }
 
-// Browser Web Speech Recognition (Microphone Input)
+// Browser Web Speech Recognition (Microphone Input with Real-Time Interruption)
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let browserRecognizer = null;
 
 if (SpeechRecognition) {
   browserRecognizer = new SpeechRecognition();
   browserRecognizer.continuous = true;
-  browserRecognizer.interimResults = false;
-  browserRecognizer.lang = 'en-US';
+  browserRecognizer.interimResults = true; // Enables instantaneous "Stop" detection while talking
+  browserRecognizer.lang = currentSpeechLang;
+
+  browserRecognizer.onstart = () => {
+    isRecognizing = true;
+    const splash = document.getElementById('splashScreen');
+    const splashStatus = document.getElementById('splashStatusText');
+    if (isVoiceListening) {
+      if (splash) splash.classList.add('listening');
+      if (splashStatus && (!window.speechSynthesis || !window.speechSynthesis.speaking)) {
+        splashStatus.textContent = 'LISTENING... // SPEAK NOW';
+      }
+    }
+  };
 
   browserRecognizer.onresult = (event) => {
-    const lastResult = event.results[event.results.length - 1];
-    if (lastResult.isFinal) {
-      const transcript = lastResult[0].transcript.trim();
-      if (transcript) {
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const res = event.results[i];
+      const transcript = res[0].transcript.trim();
+
+      // PRIORITY 1: IMMEDIATE INTERRUPT - Halt speech whenever user says "Stop", "Ruko", "Chup"
+      if (isStopCommand(transcript)) {
+        stopSpeakingImmediately();
+        if (res.isFinal) {
+          appendChatMessage('user', transcript);
+          appendChatMessage('assistant', 'Speech output terminated, Sir.');
+        }
+        return;
+      }
+
+      // If J.A.R.V.I.S. is currently speaking out loud, ignore non-stop audio to prevent self-loop echo
+      if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        continue;
+      }
+
+      // Only process commands when voice recognition is active
+      if (!isVoiceListening) {
+        return;
+      }
+
+      // PRIORITY 2: TURN VOICE RECOGNITION OFF VIA SPEECH
+      if (isVoiceOffCommand(transcript)) {
+        if (res.isFinal) {
+          console.log('[Voice OFF Command]:', transcript);
+          appendChatMessage('user', transcript);
+          const reply = currentSpeechLang === 'ur-PK' ? 
+            'وائس ریکگنیشن بند کر دی گئی ہے، سر۔' : 
+            'Voice listeners disengaged, Sir.';
+          appendChatMessage('assistant', reply);
+          speakResponse(reply, true);
+          setVoiceListeningState(false, false, false);
+        }
+        return;
+      }
+
+      // Process complete user command upon final utterance
+      if (res.isFinal && transcript) {
         console.log('[Web Speech Captured]:', transcript);
-        sendUserMessage(transcript);
+        handleVoiceCommandOrChat(transcript);
       }
     }
   };
@@ -373,13 +556,139 @@ if (SpeechRecognition) {
     if (e.error !== 'no-speech') {
       console.warn('[Web Speech Error]:', e.error);
     }
+    isRecognizing = false;
   };
 
   browserRecognizer.onend = () => {
-    if (isVoiceListening) {
+    isRecognizing = false;
+    // Automatically re-listen only if voice mode is engaged and not currently outputting audio
+    if (isVoiceListening && (!window.speechSynthesis || !window.speechSynthesis.speaking)) {
       try { browserRecognizer.start(); } catch (e) {}
     }
   };
+}
+
+// Hardware Panel Drawer State Controller (Voice & UI Activated)
+function setHardwarePanelState(open, announce = false) {
+  const panel = document.getElementById('hardwarePanel');
+  const dockBtn = document.getElementById('btnToggleHardware');
+  if (!panel) return;
+
+  if (open) {
+    panel.classList.remove('collapsed');
+    if (dockBtn) dockBtn.style.display = 'none';
+  } else {
+    panel.classList.add('collapsed');
+    if (dockBtn) dockBtn.style.display = 'flex';
+  }
+
+  if (announce) {
+    const isUrdu = currentSpeechLang === 'ur-PK';
+    const text = open ? 
+      (isUrdu ? 'ہارڈویئر اور لائٹنگ پینل کھول دیا گیا ہے، سر۔' : 'Hardware management and lighting matrix deployed, Sir.') :
+      (isUrdu ? 'ہارڈویئر پینل بند کر دیا گیا ہے، سر۔' : 'Hardware panel docked, Sir.');
+    appendChatMessage('assistant', text);
+    speakResponse(text, true);
+  }
+}
+
+function isHardwareOpenCommand(text) {
+  const t = text.trim();
+  // Avoid matching device power toggling commands like "turn on lights" or "switch plug"
+  if (/\b(turn|switch|power\s*on|power\s*off)\b/i.test(t)) {
+    return false;
+  }
+  const enRegex = /\b(hardware\s*management|open\s*hardware|show\s*hardware|hardware\s*panel|lights\s*panel|smart\s*lights|lights\s*management|open\s*lights|show\s*lights|hardware\s*kholo|lights\s*kholo|hardware\s*dikhao|lights\s*dikhao)\b/i;
+  const exactRegex = /^(?:hardware|lights|smart\s*plug|smart\s*lights|hardware\s*management)$/i;
+  const urduRegex = /[\u0600-\u06FF]/.test(t) && /(ہارڈویئر\s*(?:مینجمنٹ|پینل|کھولو|دکھاؤ)?|لائٹس\s*(?:پینل|کھولو|دکھاؤ)|بجلی\s*پینل)/.test(t);
+
+  return enRegex.test(t) || exactRegex.test(t) || urduRegex;
+}
+
+function isHardwareCloseCommand(text) {
+  const t = text.trim();
+  const enRegex = /\b(close\s*hardware|hide\s*hardware|dock\s*hardware|close\s*lights|hide\s*lights|dock\s*lights|hardware\s*band(?:\s*karo)?|lights\s*band(?:\s*karo)?|band\s*karo\s*hardware)\b/i;
+  const urduRegex = /[\u0600-\u06FF]/.test(t) && /(ہارڈویئر\s*بند|لائٹس\s*بند|پینل\s*بند|ہارڈویئر\s*چھپاؤ)/.test(t);
+
+  return enRegex.test(t) || urduRegex;
+}
+
+// Voice Command Router (Start Deck, Stand Down, Hardware Drawer, or Bilingual AI Core)
+function handleVoiceCommandOrChat(text) {
+  const clean = text.trim();
+  if (!clean) return;
+
+  const splashScreen = document.getElementById('splashScreen');
+  const splashStatus = document.getElementById('splashStatusText');
+
+  // 1. Hardware Drawer Close Command:
+  if (isHardwareCloseCommand(clean)) {
+    appendChatMessage('user', clean);
+    setHardwarePanelState(false, true);
+    return;
+  }
+
+  // 2. Hardware Drawer Open Command ("hardware management", "lights", etc.):
+  if (isHardwareOpenCommand(clean)) {
+    // If on splash screen, transition to tactical deck too!
+    if (splashScreen) {
+      splashScreen.classList.add('hidden');
+    }
+    if (splashStatus) {
+      splashStatus.textContent = 'HARDWARE MATRIX DEPLOYED';
+    }
+    appendChatMessage('user', clean);
+    setHardwarePanelState(true, true);
+    return;
+  }
+
+  // 3. Transition to Chat & Hardware Deck:
+  // "when i say 'Lets start', 'Lets begin', 'Shuru karen', 'Haan bhi', it should transition to the chat and hardware side"
+  const isStartCmd = (
+    /\b(let'?s\s*start|let'?s\s*begin|shuru\s*kar(?:en|ein|o|iye)?|haan?\s*(?:bhi|bhai|jee|ji)?|han\s*bhi|chalo\s*shuru|sure\s*(?:karen|current|can)|sugar\s*can|shoe\s*can|on\s*the|hun\s*bee|harm\s*be)\b/i.test(clean) ||
+    (/[\u0600-\u06FF]/.test(clean) && /(شروع\s*(?:کریں|کرو|کیجیے)?|ہاں\s*(?:بھائی|جی|بھی)|چلو)/.test(clean))
+  );
+
+  if (isStartCmd) {
+    if (splashScreen) {
+      splashScreen.classList.add('hidden');
+    }
+    if (splashStatus) {
+      splashStatus.textContent = 'TACTICAL DECK ENGAGED';
+    }
+    appendChatMessage('user', clean);
+    const reply = "Tactical matrix and dialogue core engaged, Sir. Standing by.";
+    appendChatMessage('assistant', reply);
+    speakResponse(reply, true);
+    return;
+  }
+
+  // 4. Return back to Arc Reactor Centerpiece:
+  // "when i say 'Standown' it should return back to arc reactor"
+  const isStandDownCmd = (
+    /\b(stand\s*down|standown|stand-down|return\s*(?:to\s*)?arc|arc\s*core|wapas\s*jao|piche\s*hato)\b/i.test(clean) ||
+    (/[\u0600-\u06FF]/.test(clean) && /(واپس\s*جاؤ|کھڑے\s*ہو\s*جاؤ|سٹینڈ\s*ڈاؤن)/.test(clean))
+  );
+
+  if (isStandDownCmd) {
+    if (splashScreen) {
+      splashScreen.classList.remove('hidden');
+    }
+    if (splashStatus) {
+      splashStatus.textContent = 'NEURAL CORE ONLINE';
+    }
+    appendChatMessage('user', clean);
+    const reply = "Standing down to neural core, Sir.";
+    appendChatMessage('assistant', reply);
+    speakResponse(reply, true);
+    return;
+  }
+
+  // 5. Regular Command or Dialogue -> Chat Pipeline
+  if (splashStatus) {
+    splashStatus.textContent = `ANALYZING // "${clean.slice(0, 22).toUpperCase()}"`;
+  }
+  sendUserMessage(clean);
 }
 
 async function sendUserMessage(text) {
@@ -387,6 +696,54 @@ async function sendUserMessage(text) {
   if (!msg) return;
 
   chatInput.value = '';
+
+  // Check typed commands for start, standdown, hardware, and stop as well
+  const splashScreen = document.getElementById('splashScreen');
+  if (isStopCommand(msg)) {
+    stopSpeakingImmediately();
+    appendChatMessage('user', msg);
+    appendChatMessage('assistant', 'Speech output terminated, Sir.');
+    return;
+  }
+
+  if (isHardwareCloseCommand(msg)) {
+    appendChatMessage('user', msg);
+    setHardwarePanelState(false, true);
+    return;
+  }
+
+  if (isHardwareOpenCommand(msg)) {
+    if (splashScreen) splashScreen.classList.add('hidden');
+    appendChatMessage('user', msg);
+    setHardwarePanelState(true, true);
+    return;
+  }
+
+  const isStartCmd = (
+    /\b(let'?s\s*start|let'?s\s*begin|shuru\s*kar(?:en|ein|o|iye)?|haan?\s*(?:bhi|bhai|jee|ji)?|han\s*bhi|chalo\s*shuru)\b/i.test(msg) ||
+    (/[\u0600-\u06FF]/.test(msg) && /(شروع\s*(?:کریں|کرو|کیجیے)?|ہاں\s*(?:بھائی|جی|بھی)|چلو)/.test(msg))
+  );
+  if (isStartCmd) {
+    if (splashScreen) splashScreen.classList.add('hidden');
+    appendChatMessage('user', msg);
+    const reply = "Tactical matrix and dialogue core engaged, Sir. Standing by.";
+    appendChatMessage('assistant', reply);
+    speakResponse(reply, true);
+    return;
+  }
+  const isStandDownCmd = (
+    /\b(stand\s*down|standown|stand-down|return\s*(?:to\s*)?arc|arc\s*core|wapas\s*jao|piche\s*hato)\b/i.test(msg) ||
+    (/[\u0600-\u06FF]/.test(msg) && /(واپس\s*جاؤ|کھڑے\s*ہو\s*جاؤ|سٹینڈ\s*ڈاؤن)/.test(msg))
+  );
+  if (isStandDownCmd) {
+    if (splashScreen) splashScreen.classList.remove('hidden');
+    appendChatMessage('user', msg);
+    const reply = "Standing down to neural core, Sir.";
+    appendChatMessage('assistant', reply);
+    speakResponse(reply, true);
+    return;
+  }
+
   appendChatMessage('user', msg);
 
   try {
@@ -396,10 +753,18 @@ async function sendUserMessage(text) {
       body: JSON.stringify({ message: msg })
     });
     const data = await res.json();
-    appendChatMessage('assistant', data.response);
-    speakResponse(data.response);
+    // Only append if WebSocket is offline (active WS broadcast handles real-time append)
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      if (data && data.response) {
+        appendChatMessage('assistant', data.response);
+        speakResponse(data.response, isVoiceListening);
+      }
+    }
   } catch (err) {
     appendChatMessage('assistant', 'Telemetry connection failure. Operating offline, Sir.');
+    if (isVoiceListening) {
+      speakResponse('Telemetry connection failure. Operating offline, Sir.', true);
+    }
   }
 }
 
@@ -420,49 +785,431 @@ document.querySelectorAll('.quick-chips .chip').forEach(chip => {
   });
 });
 
-// 7. Voice Toggle Button (Hybrid Browser Web Speech + Desktop Fallback)
-btnVoiceToggle.addEventListener('click', async () => {
-  isVoiceListening = !isVoiceListening;
-  btnVoiceToggle.classList.toggle('active', isVoiceListening);
-  
+// 7. Master Voice Listener & Speaker State Controller
+async function setVoiceListeningState(active, speakGreeting = false, immediateMute = true) {
+  isVoiceListening = active;
+  const splash = document.getElementById('splashScreen');
+  const splashStatus = document.getElementById('splashStatusText');
+  const splashVoiceStatus = document.getElementById('splashVoiceStatus');
+
+  if (btnVoiceToggle) btnVoiceToggle.classList.toggle('active', isVoiceListening);
+  if (voiceBtnText) voiceBtnText.textContent = isVoiceListening ? 'VOICE: ACTIVE' : 'VOICE: STANDBY';
+
   if (isVoiceListening) {
-    voiceBtnText.textContent = 'VOICE: ACTIVE';
-    
-    // 1. Try browser Web Speech first
-    if (browserRecognizer) {
+    if (splash) splash.classList.add('listening');
+    if (splashVoiceStatus) splashVoiceStatus.textContent = 'MICROPHONE ACTIVE // LISTENING FOR COMMAND';
+
+    // Proactively request browser microphone permission
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
-        browserRecognizer.start();
-        appendChatMessage('assistant', 'Microphone audio feed initialized. Speak your commands, Sir.');
-        speakResponse('Microphone audio feed initialized. Speak your commands, Sir.');
+        await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (err) {
-        console.debug('Browser speech start:', err);
+        console.warn('Microphone permission request:', err);
       }
     }
 
-    // 2. Also notify backend voice service if running locally
+    // Start Web Speech Recognition
+    if (browserRecognizer && !isRecognizing) {
+      try { browserRecognizer.start(); } catch (e) {}
+    }
+
+    // Notify backend voice service if running locally
     try {
-      await fetch('/api/voice/start', { method: 'POST' });
-    } catch (e) {
-      // Serverless or background
+      fetch('/api/voice/start', { method: 'POST' });
+    } catch (e) {}
+
+    if (speakGreeting) {
+      if (splashStatus) splashStatus.textContent = 'TRANSMITTING // INITIALIZING';
+      appendChatMessage('assistant', 'Microphone audio feed initialized. Standing by for your commands, Sir.');
+      speakResponse('I am listening, Sir. How may I assist you?', true);
+    } else {
+      if (splashStatus) splashStatus.textContent = 'LISTENING... // SPEAK NOW';
     }
   } else {
-    voiceBtnText.textContent = 'VOICE: STANDBY';
-    if (browserRecognizer) {
+    if (splash) splash.classList.remove('listening');
+    if (splashStatus) splashStatus.textContent = 'NEURAL CORE ONLINE';
+    if (splashVoiceStatus) splashVoiceStatus.textContent = 'VOICE LISTENERS STANDING BY // CLICK LOGO TO SPEAK';
+
+    if (browserRecognizer && isRecognizing) {
       try { browserRecognizer.stop(); } catch (e) {}
     }
-    if (window.speechSynthesis) {
+    if (immediateMute && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     try {
-      await fetch('/api/voice/stop', { method: 'POST' });
+      fetch('/api/voice/stop', { method: 'POST' });
     } catch (e) {}
-    appendChatMessage('assistant', 'Voice listeners disengaged.');
+    if (immediateMute) {
+      appendChatMessage('assistant', 'Voice listeners disengaged.');
+    }
   }
+}
+
+btnVoiceToggle.addEventListener('click', () => {
+  setVoiceListeningState(!isVoiceListening, !isVoiceListening);
 });
+
+// ==============================================================================
+// ==============================================================================
+// 8. 3D Neural Web Particle Constellation Engine (Iron Man HUD Voice Reactive)
+// Organic Fluid Undulation, Dynamic Synaptic Pulses, and Multi-Harmonic Waves
+// ==============================================================================
+
+class NeuralWebVisualizer {
+  constructor(canvasId) {
+    this.canvas = document.getElementById(canvasId);
+    if (!this.canvas) return;
+    this.ctx = this.canvas.getContext('2d');
+    this.particles = [];
+    this.particleCount = 280; // Dense, intricate neural web
+    this.signals = []; // Active synaptic pulses traveling along filaments
+    this.maxSignals = 45;
+    this.isSpeaking = false;
+    this.speechCadence = 0;
+    this.voiceIntensity = 0;
+    this.time = 0;
+    this.animId = null;
+
+    this.init();
+  }
+
+  init() {
+    this.resize();
+    this.createParticles();
+    window.addEventListener('resize', () => {
+      this.resize();
+      this.createParticles();
+    });
+    this.animate();
+  }
+
+  resize() {
+    if (!this.canvas) return;
+    this.width = this.canvas.width = window.innerWidth;
+    this.height = this.canvas.height = window.innerHeight;
+    this.cx = this.width / 2;
+    this.cy = this.height / 2;
+    this.minDim = Math.min(this.width, this.height);
+  }
+
+  createParticles() {
+    this.particles = [];
+    this.signals = [];
+    for (let i = 0; i < this.particleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      // Volumetric radial layering: 0 = near core boundary, 1 = outer undulating boundary
+      // Quadratic spread distributes points smoothly across the depth volume, preventing hollow donut rings
+      const layer = Math.pow(Math.random(), 0.75); 
+      // Base idle anchor radius: hugs safely outside the 88px inner core (115px to 235px)
+      const baseRadius = 115 + layer * 120;
+
+      this.particles.push({
+        angle: angle,
+        layer: layer, // 0 (inner) to 1 (outer periphery)
+        baseRadius: baseRadius,
+        currentRadius: baseRadius,
+        targetRadius: baseRadius,
+        z: (Math.random() - 0.5) * 260, // Volumetric 3D depth
+        // Angular drift: varied speeds create dynamic, non-rigid rotation
+        angularSpeed: (Math.random() * 0.003 + 0.001) * (Math.random() > 0.45 ? 1 : -1),
+        // Organic undulating harmonic parameters
+        harmonicPhase: Math.random() * Math.PI * 2,
+        harmonicSpeed: Math.random() * 0.04 + 0.02,
+        // Individual breathing oscillation
+        flutterSpeed: Math.random() * 0.06 + 0.03,
+        flutterPhase: Math.random() * Math.PI * 2,
+        // Sharp pinpoint dot geometry
+        size: Math.random() * 0.75 + 0.65,
+        pulseOffset: Math.random() * Math.PI * 2,
+        baseAlpha: Math.random() * 0.35 + 0.55,
+        energyFlash: 0 // Flash intensity when synaptic pulse arrives
+      });
+    }
+  }
+
+  setSpeaking(speaking) {
+    this.isSpeaking = speaking;
+  }
+
+  animate() {
+    this.time += 0.032;
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.width, this.height);
+
+    // Multi-harmonic voice cadence wave: dynamically fluctuates between normal (50%) and stretched (70%)
+    if (this.isSpeaking) {
+      const voiceWave = Math.sin(this.time * 5.4) * 0.40 + 
+                        Math.sin(this.time * 11.2) * 0.35 + 
+                        Math.cos(this.time * 17.6) * 0.25;
+      // 0 = normal speaking baseline, 1 = fully stretched vocal peak
+      this.voiceIntensity = Math.max(0, Math.min(1, 0.45 + voiceWave * 0.55));
+      this.speechCadence += (1.0 - this.speechCadence) * 0.12;
+    } else {
+      this.voiceIntensity = 0;
+      this.speechCadence += (0 - this.speechCadence) * 0.06;
+    }
+
+    // Exact Page Coverage Targets
+    // Normal Speaking Coverage: diameter = 50% of viewport min dimension (radius = minDim * 0.25)
+    const normalSpeakRadius = this.minDim * 0.25;
+    // Peak Voice Stretch Coverage: diameter = 70% of viewport min dimension (radius = minDim * 0.35)
+    const maxStretchRadius = this.minDim * 0.35;
+    // Dynamic active speech radius modulated by voice cadence
+    const currentVoiceRadius = normalSpeakRadius + (maxStretchRadius - normalSpeakRadius) * this.voiceIntensity;
+
+    const maxConnectDist = this.isSpeaking ? Math.max(78, this.minDim * 0.09) : 54;
+    const maxConnectDistSq = maxConnectDist * maxConnectDist;
+    const renderedNodes = [];
+
+    // 1. Update Particle Positions with Organic Undulating Waves & 3D Perspective
+    for (let i = 0; i < this.particles.length; i++) {
+      const p = this.particles[i];
+
+      // Tangential orbital drift (speeds up slightly with speech)
+      p.angle += p.angularSpeed * (1 + this.speechCadence * 1.6);
+
+      // Multi-harmonic wave ripples along circumference (eliminates rigid circle / straight lines)
+      const wave1 = Math.sin(p.angle * 3 + this.time * 2.2 + p.harmonicPhase) * 0.38;
+      const wave2 = Math.cos(p.angle * 5 - this.time * 2.8) * 0.32;
+      const wave3 = Math.sin(p.angle * 7 + this.time * 3.7) * 0.20;
+      const wave4 = Math.sin(p.angle * 11 - this.time * 5.1) * 0.12;
+      const organicRipple = (wave1 + wave2 + wave3 + wave4) * (this.minDim * 0.055) * p.layer * this.speechCadence;
+
+      // Radial shockwave ripple propagating outward from core to periphery
+      const travelingShockwave = Math.sin(this.time * 7.5 - p.currentRadius * 0.02) * (14 * p.layer * this.speechCadence);
+
+      // Individual organic breathing
+      const idleFlutter = Math.sin(this.time * 2.5 + p.flutterPhase) * (4 + p.layer * 6);
+
+      // Target radius calculation: volumetric interpolation from inner core boundary to outer 50%-70% perimeter
+      const innerCoreMargin = 115;
+      const layerTargetVoice = innerCoreMargin + p.layer * (currentVoiceRadius - innerCoreMargin);
+      const targetR = (p.baseRadius * (1 - this.speechCadence)) + 
+                      (layerTargetVoice * this.speechCadence) + 
+                      organicRipple + 
+                      travelingShockwave + 
+                      idleFlutter;
+
+      // Fluid spring dampening for smooth organic motion
+      p.currentRadius += (targetR - p.currentRadius) * 0.085;
+
+      // 3D perspective projection
+      const fov = 420;
+      const scale = fov / (fov + p.z);
+      const px = this.cx + Math.cos(p.angle) * p.currentRadius * scale;
+      const py = this.cy + Math.sin(p.angle) * p.currentRadius * scale;
+
+      // Decay energy flash
+      if (p.energyFlash > 0) p.energyFlash *= 0.88;
+
+      const alphaPulse = Math.sin(this.time * 3 + p.pulseOffset) * 0.2;
+      const currentAlpha = Math.min(1, Math.max(0.18, p.baseAlpha + alphaPulse + this.speechCadence * 0.35 + p.energyFlash));
+
+      renderedNodes.push({
+        id: i,
+        x: px,
+        y: py,
+        z: p.z,
+        layer: p.layer,
+        angle: p.angle,
+        size: p.size * scale * (1 + this.speechCadence * 0.25 + p.energyFlash * 0.4),
+        alpha: currentAlpha,
+        energyFlash: p.energyFlash,
+        connections: 0
+      });
+    }
+
+    // 2. Render Living Synaptic Filaments (Organic Line Network)
+    const activeFilaments = [];
+
+    for (let i = 0; i < renderedNodes.length; i++) {
+      const n1 = renderedNodes[i];
+      for (let j = i + 1; j < renderedNodes.length; j++) {
+        const n2 = renderedNodes[j];
+        if (n1.connections > 5 && n2.connections > 5) continue;
+
+        // Prevent rigid chords: reduce connection likelihood between two far-outer perimeter nodes
+        if (n1.layer > 0.82 && n2.layer > 0.82) {
+          const angleDiff = Math.abs(n1.angle - n2.angle);
+          if (angleDiff > 0.35 && angleDiff < Math.PI * 2 - 0.35) continue;
+        }
+
+        const dx = n1.x - n2.x;
+        const dy = n1.y - n2.y;
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < maxConnectDistSq) {
+          const dist = Math.sqrt(distSq);
+          // Audio shimmer wave along lines
+          const shimmer = Math.sin(this.time * 4.5 + (n1.angle + n2.angle) * 2) * 0.2;
+          const baseLineAlpha = (1 - dist / maxConnectDist) * (0.50 + shimmer) * Math.min(n1.alpha, n2.alpha);
+          
+          ctx.beginPath();
+          ctx.moveTo(n1.x, n1.y);
+          ctx.lineTo(n2.x, n2.y);
+          
+          if (this.isSpeaking) {
+            ctx.strokeStyle = `rgba(0, 229, 255, ${Math.min(1, baseLineAlpha * 1.35)})`;
+            ctx.lineWidth = 0.7;
+          } else {
+            ctx.strokeStyle = `rgba(77, 216, 255, ${Math.min(1, baseLineAlpha * 0.65)})`;
+            ctx.lineWidth = 0.45;
+          }
+          ctx.stroke();
+
+          n1.connections++;
+          n2.connections++;
+
+          activeFilaments.push({ n1, n2 });
+        }
+      }
+    }
+
+    // 3. Synaptic Energy Signal Packets (Darting Electric Sparks)
+    // Spawns and transmits electric pulses along connections to make network feel alive
+    if (activeFilaments.length > 0) {
+      const spawnTarget = this.isSpeaking ? this.maxSignals : 18;
+      if (this.signals.length < spawnTarget && Math.random() < (this.isSpeaking ? 0.45 : 0.15)) {
+        const filament = activeFilaments[Math.floor(Math.random() * activeFilaments.length)];
+        this.signals.push({
+          n1: filament.n1,
+          n2: filament.n2,
+          progress: 0,
+          speed: Math.random() * 0.04 + (this.isSpeaking ? 0.035 : 0.02)
+        });
+      }
+    }
+
+    // Update and render active synaptic signals
+    for (let s = this.signals.length - 1; s >= 0; s--) {
+      const sig = this.signals[s];
+      sig.progress += sig.speed;
+
+      if (sig.progress >= 1.0) {
+        // Flash destination node on arrival
+        const destParticle = this.particles[sig.n2.id];
+        if (destParticle) destParticle.energyFlash = 0.8;
+        this.signals.splice(s, 1);
+        continue;
+      }
+
+      const sx = sig.n1.x + (sig.n2.x - sig.n1.x) * sig.progress;
+      const sy = sig.n1.y + (sig.n2.y - sig.n1.y) * sig.progress;
+
+      // Electric spark aura
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.5)';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sharp white signal core
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 4. Render Crisp Pinpoint Glowing Nodes
+    for (let i = 0; i < renderedNodes.length; i++) {
+      const n = renderedNodes[i];
+      
+      // Node Subtle Halo Aura
+      const haloRadius = n.size * (2.8 + n.energyFlash * 2.0);
+      const glowGrad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, haloRadius);
+      glowGrad.addColorStop(0, `rgba(0, 229, 255, ${n.alpha * 0.9})`);
+      glowGrad.addColorStop(0.5, `rgba(77, 216, 255, ${n.alpha * 0.35})`);
+      glowGrad.addColorStop(1, 'rgba(0, 229, 255, 0)');
+
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, haloRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Node Sharp Center Core (Pinpoint)
+      ctx.fillStyle = (this.isSpeaking || n.energyFlash > 0.3) ? '#ffffff' : '#7fe8ff';
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.size * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    this.animId = requestAnimationFrame(() => this.animate());
+  }
+}
+
+// 9. Splash Screen Navigation & Interactive Transitions
+function initSplashTransitions() {
+  const splashScreen = document.getElementById('splashScreen');
+  const btnReturnSplash = document.getElementById('btnReturnSplash');
+  const logoWrapper = document.querySelector('.splash-centerpiece-wrapper');
+  const btnLangToggle = document.getElementById('btnLangToggle');
+  const splashLangBtn = document.getElementById('splashLangBtn');
+
+  if (logoWrapper) {
+    logoWrapper.addEventListener('click', (e) => {
+      e.stopPropagation(); // Stay on splash screen to converse with J.A.R.V.I.S.
+      // Engage voice hearing mode: open mic, speak greeting, and await user command
+      setVoiceListeningState(true, true);
+    });
+  }
+
+  if (splashScreen) {
+    splashScreen.addEventListener('click', () => {
+      // Clicking outside the logo transitions to the tactical deck
+      splashScreen.classList.add('hidden');
+    });
+  }
+
+  if (btnReturnSplash && splashScreen) {
+    btnReturnSplash.addEventListener('click', (e) => {
+      e.stopPropagation();
+      splashScreen.classList.remove('hidden');
+    });
+  }
+
+  // Language Toggle Button Handlers (HUD and Splash)
+  if (btnLangToggle) {
+    btnLangToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nextLang = currentSpeechLang === 'ur-PK' ? 'en-US' : 'ur-PK';
+      setSpeechLanguage(nextLang, true);
+    });
+  }
+  if (splashLangBtn) {
+    splashLangBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nextLang = currentSpeechLang === 'ur-PK' ? 'en-US' : 'ur-PK';
+      setSpeechLanguage(nextLang, true);
+    });
+  }
+
+  // Left Dock Option & Close Button Handlers
+  const btnToggleHardware = document.getElementById('btnToggleHardware');
+  const btnCloseHardware = document.getElementById('btnCloseHardware');
+
+  if (btnToggleHardware) {
+    btnToggleHardware.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setHardwarePanelState(true, false);
+    });
+  }
+
+  if (btnCloseHardware) {
+    btnCloseHardware.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setHardwarePanelState(false, false);
+    });
+  }
+}
+
+let neuralVisualizer = null;
 
 // Initialize on Load
 window.addEventListener('DOMContentLoaded', () => {
   initWebSocket();
   pollTelemetryFallback();
   setInterval(pollTelemetryFallback, 4000);
+  neuralVisualizer = new NeuralWebVisualizer('neuralWebCanvas');
+  initSplashTransitions();
+  updateLanguageDisplay();
+  setHardwarePanelState(true, false);
 });
