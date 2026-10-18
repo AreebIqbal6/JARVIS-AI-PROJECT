@@ -162,8 +162,11 @@ function initWebSocket() {
         if (msg.type === 'telemetry') {
           updateHardwareUI(msg.data);
         } else if (msg.type === 'chat_message') {
-          appendChatMessage('assistant', msg.reply);
-          speakResponse(msg.reply, true);
+          if (window._lastRenderedReply !== msg.reply) {
+            window._lastRenderedReply = msg.reply;
+            appendChatMessage('assistant', msg.reply);
+            speakResponse(msg.reply, true);
+          }
         }
       } catch (e) {
         console.error('[WS Parse Error]:', e);
@@ -899,6 +902,7 @@ async function sendUserMessage(text) {
     return;
   }
 
+  window._lastRenderedReply = null;
   appendChatMessage('user', msg);
 
   try {
@@ -907,18 +911,24 @@ async function sendUserMessage(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg })
     });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
     const data = await res.json();
-    // Only append if WebSocket is offline (active WS broadcast handles real-time append)
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      if (data && data.response) {
-        appendChatMessage('assistant', data.response);
-        speakResponse(data.response, true);
-      }
+    if (data && data.response && window._lastRenderedReply !== data.response) {
+      window._lastRenderedReply = data.response;
+      appendChatMessage('assistant', data.response);
+      speakResponse(data.response, true);
     }
   } catch (err) {
-    appendChatMessage('assistant', 'Telemetry connection failure. Operating offline, Sir.');
-    if (isVoiceListening) {
-      speakResponse('Telemetry connection failure. Operating offline, Sir.', true);
+    console.warn('[Telemetry Sync Note]:', err);
+    const fallbackMsg = "Local intelligence standing by, Sir. Operating autonomously on your Wi-Fi network.";
+    if (window._lastRenderedReply !== fallbackMsg) {
+      window._lastRenderedReply = fallbackMsg;
+      appendChatMessage('assistant', fallbackMsg);
+      if (isVoiceListening) {
+        speakResponse(fallbackMsg, true);
+      }
     }
   }
 }

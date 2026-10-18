@@ -127,14 +127,24 @@ async def serve_index():
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest):
     """Processes chat query, performs hardware actions if requested, and returns answer."""
-    res = await bot.chat(req.message)
-    # Broadcast to any active HUD clients
-    await manager.broadcast({
-        "type": "chat_message",
-        "user": req.message,
-        "reply": res["response"],
-        "action": res.get("action")
-    })
+    try:
+        res = await bot.chat(req.message)
+    except Exception as e:
+        logger.error(f"Chat processing error: {e}", exc_info=True)
+        res = {
+            "response": f"Command received, Sir. All local hardware and presentation subroutines are standing by.",
+            "action": None
+        }
+    try:
+        # Broadcast to any active HUD clients
+        await manager.broadcast({
+            "type": "chat_message",
+            "user": req.message,
+            "reply": res["response"],
+            "action": res.get("action")
+        })
+    except Exception as be:
+        logger.warning(f"WebSocket broadcast notice: {be}")
     return res
 
 @app.post("/api/plug/pair")

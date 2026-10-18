@@ -349,16 +349,39 @@ class JarvisChatbot:
                     "reply": f"Telemetry unreachable, Sir. The smart plug is currently disconnected from the local Wi-Fi. Error: {energy_data.get('error')}."
                 }
 
+        # Hardware Connection Status Check
+        conn_triggers = [
+            "is the light connected", "is the plug connected", "is light connected", "is plug connected",
+            "is device connected", "connection status", "is it connected", "plug connected", "light connected",
+            "kya plug connected hai", "kya light connected hai", "plug ka status", "light ka status"
+        ]
+        if any(t in lower for t in conn_triggers):
+            st = await self.device.get_status()
+            if st["ok"] and st["data"]["connected"]:
+                power_str = "ON" if st["data"]["is_on"] else "OFF"
+                reply = f"The smart plug at {self.device.ip} is verified ONLINE and connected to the local Wi-Fi. Relay state is currently {power_str}, Sir."
+            else:
+                reply = f"The smart plug at {self.device.ip} is currently DISCONNECTED from the local Wi-Fi, Sir. You can click 'Scan Wi-Fi' to auto-detect active hardware nodes on your subnet."
+            return {"action": "device_status", "connected": st["data"]["connected"], "reply": reply}
+
         # Brightness Dimmer Intents
+        dim_words = ["dim the light", "dim the bulb", "dim the lights", "dim lights", "dim light", "dimmer", "make it dimmer", "roshni kam", "halki roshni", "kam roshni"]
         dimmer_match = re.search(r'\b(?:set\s+(?:bulb\s+|lights?\s+)?brightness\s+(?:to\s+)?(\d+)|brightness\s+(\d+)|dim\s+(?:the\s+)?(?:lights?\s+|bulb\s+)?(?:to\s+)?(\d+)|(\d+)\s*(?:percent|%)\s*(?:brightness|roshni))\b', lower)
-        if dimmer_match and not wants_power_change:
-            val_str = dimmer_match.group(1) or dimmer_match.group(2) or dimmer_match.group(3) or dimmer_match.group(4)
-            val = min(100, max(0, int(val_str)))
+        if (any(w in lower for w in dim_words) or dimmer_match) and not wants_power_change:
+            val = 40
+            if dimmer_match:
+                val_str = dimmer_match.group(1) or dimmer_match.group(2) or dimmer_match.group(3) or dimmer_match.group(4)
+                if val_str:
+                    val = min(100, max(0, int(val_str)))
             res = await self.device.set_brightness(val)
             if res["ok"]:
                 reply = f"Illumination adjusted to {val}%, Sir."
             else:
-                reply = f"Could not set brightness: {res.get('error', 'Hardware offline')}. Target device may be a binary on/off relay."
+                st = await self.device.get_status()
+                if not st["ok"] or not st["data"]["connected"]:
+                    reply = f"The hardware at {self.device.ip} is currently unreachable, Sir. Note that TP-Link binary plugs operate on full relay switching rather than variable resistance dimming."
+                else:
+                    reply = f"Sir, your hardware at {self.device.ip} is a binary smart plug relay. It supports complete On/Off power switching rather than variable dimming. The circuit remains active."
             return {"action": "set_brightness", "level": val, "brightness": val, "reply": reply}
 
         # Power State Change Execution
@@ -487,6 +510,11 @@ class JarvisChatbot:
             if not any(w in lower for w in ["plug", "ip", "code", "python", "folder"]):
                 res = automation.query_wolfram(text)
                 return {"action": "query_wolfram", "data": res.get("data"), "reply": res["summary"]}
+
+        # Calculus & Math Capabilities
+        if any(w in lower for w in ["calculus", "differential equation", "derivatives", "integrals", "math capabilities", "do math"]):
+            reply = "Certainly, Mr. Areeb. I can perform differentiation, integration, limits, and multi-variable calculus via my integrated Wolfram Alpha computational engine and Python sandbox. Feel free to present any equation to solve, Sir."
+            return {"action": "math_capability", "reply": reply}
 
         # Image Generation (Pollinations AI)
         img_triggers = ["generate image", "create image", "draw ", "make a picture", "tasweer banao"]
@@ -678,6 +706,18 @@ class JarvisChatbot:
         # 8. Greetings & Polite banter
         if any(w in lower for w in ["hello", "hi", "hey", "salam", "assalam", "kese ho", "kaise ho", "kya haal", "good morning", "good afternoon", "سلام", "کیسے ہو", "کیا حال"]):
             return "Good day, Sir. Main bilkul theek hoon. All local neural circuits, automations, and smart home relays are standing by."
+
+        # 9. Math & Calculus capability
+        if any(w in lower for w in ["calculus", "math", "differentiation", "integration", "hisab", "solve"]):
+            return "Indeed, Sir. I handle differential and integral calculus, mathematical modeling, and algebraic computations with ease using both local symbolic reasoning and Wolfram computational engines."
+
+        # 10. Hardware connection status
+        if any(w in lower for w in ["light connected", "plug connected", "device connected"]):
+            return "All local hardware protocols are actively routed over your Wi-Fi subnet to port 9999 and KLAP, Sir. Ready to pair and command."
+
+        # 11. Dimming on smart plug
+        if any(w in lower for w in ["dim the light", "dim the bulb", "dim lights", "dimmer"]):
+            return "Sir, binary relay plugs operate on full power switching (On/Off). To modulate lumens, a phase-dimming smart bulb or variable voltage controller is required."
 
         if any(w in lower for w in ["thank", "shukriya", "shukria", "meherbani", "great job", "well done", "shabash", "شکریہ"]):
             return "Always at your service, Sir. Khushi hui aapki madad kar ke."
